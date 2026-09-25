@@ -235,6 +235,14 @@ async function savePosition(p, force = false) {
 }
 
 const socketByUser = new Map(); // uid -> socket
+// Avisa todos os jogadores quando alguém entra/sai de combate (aparece acima do nome dele)
+function markCombat(uid, kind) {
+  const me = meByUser.get(uid);
+  const next = kind || null;
+  if (!me || me.combat === next) return;
+  me.combat = next;
+  io.emit('player:combat', { id: uid, combat: next });
+}
 const meByUser = new Map(); // uid -> { id, username, x, y }
 function teleportHome(uid) {
   const me = meByUser.get(uid);
@@ -250,7 +258,7 @@ const raidSys = createRaidSystem({
   io, prisma, MAP, socketByUser, meByUser, teleportHome,
   clearing: inClearing,
   isBusy: (uid) => battlingUsers.has(uid),
-  setBusy: (uid, v) => (v ? battlingUsers.add(uid) : battlingUsers.delete(uid)),
+  setBusy: (uid, v) => { v ? battlingUsers.add(uid) : battlingUsers.delete(uid); markCombat(uid, v ? 'raid' : null); }, // usado pela raid
 });
 
 const chat = createChat({ io, socketByUser, meByUser, groupMembers: raidSys.groupMembers });
@@ -273,7 +281,7 @@ io.on('connection', (socket) => {
   // Evita sessão duplicada da mesma conta
   for (const [sid, p] of players) if (p.id === u.id) io.sockets.sockets.get(sid)?.disconnect(true);
 
-  const me = { id: u.id, username: u.username, x: u.x, y: u.y, dir: 'down' };
+  const me = { id: u.id, username: u.username, x: u.x, y: u.y, dir: 'down', combat: null };
   players.set(socket.id, me);
   socketByUser.set(u.id, socket);
   meByUser.set(u.id, me);
@@ -322,6 +330,7 @@ io.on('connection', (socket) => {
   async function startBattle(w) {
     starting = true;
     setBusy(true);
+    markCombat(u.id, 'wild');
     w.busy = true;
     io.emit('wild:remove', w.id);
     try {
@@ -336,7 +345,7 @@ io.on('connection', (socket) => {
       releaseWild(w);
     } finally {
       starting = false;
-      if (!battle) setBusy(false);
+      if (!battle) { setBusy(false); markCombat(u.id, null); }
     }
   }
 
@@ -383,6 +392,7 @@ io.on('connection', (socket) => {
         immuneUntil = Date.now() + IMMUNE_MS;
         battle = null;
         setBusy(false);
+        markCombat(u.id, null);
         lastTile = '';
         if (r.result === 'lose') {
           socket.emit('player:correct', { x: me.x, y: me.y });

@@ -49,6 +49,7 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 - **Progressão**: se todos os da equipe desmaiarem, ela é curada e você volta ao Centro.
 - **Centro Pokémon**: a clareira central cura a equipe e repõe Pokébolas comuns até 10.
 - Enquanto está em batalha, o servidor ignora movimentos do jogador.
+- **Indicador de combate**: quando um jogador encosta num selvagem ou entra numa raid, aparece uma etiqueta vermelha piscando (**⚔ EM COMBATE** / **⚔ EM RAID**) acima do nome dele para todos os outros; ela some quando a luta termina. Quem entra no mundo durante a luta já vê a etiqueta, e no minimapa o ponto dele fica vermelho. O estado vem do servidor (evento player:combat).
 
 ## Grupo e Boss lendário (a cada 3 horas)
 - **Boss**: a cada 3 h aparece um lendário (sorteado entre os 21, com os mais poderosos como Rayquaza, Kyogre, Groudon e Deoxys bem mais raros; tabela `BOSS_TABLE`) num ponto do mapa, com aura dourada, estrela no minimapa e aviso para todos. O chip do HUD mostra o tempo restante (clique para ir até ele) ou quanto falta para o próximo. Ele espera 30 min por desafiantes. O primeiro aparece 2 min depois de ligar o servidor; a hora do último boss fica no banco, então o intervalo de 3 h continua valendo mesmo depois de reiniciar (para testar, use `BOSS_INTERVAL_MIN` pequeno).

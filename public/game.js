@@ -392,7 +392,7 @@ class WorldScene extends Phaser.Scene {
     this.socket.on('players:init', ({ self, others, balls }) => {
       MY_ID = self.id;
       setBalls(balls);
-      this.others.forEach((o) => { o.sprite.destroy(); o.label.destroy(); o.shadow.destroy(); });
+      this.others.forEach((o) => { o.sprite.destroy(); o.label.destroy(); o.shadow.destroy(); o.tag.destroy(); });
       this.others.clear();
       if (this.player) this.player.setPosition(self.x, self.y); else this.spawnSelf(self);
       others.forEach((p) => this.addOther(p));
@@ -406,13 +406,14 @@ class WorldScene extends Phaser.Scene {
       const o = this.others.get(id);
       if (!o) return;
       toast(`${o.name} saiu`);
-      o.sprite.destroy(); o.label.destroy(); o.shadow.destroy();
+      o.sprite.destroy(); o.label.destroy(); o.shadow.destroy(); o.tag.destroy();
       this.others.delete(id);
     });
     window.worldScene = this;
     this.socket.on('chat:history', (list) => { chat.msgs.global = list.slice(); if (chat.tab === 'global') renderChat(); });
     this.socket.on('chat:msg', addChat);
     this.socket.on('chat:error', (m) => toast(m));
+    this.socket.on('player:combat', ({ id, combat }) => this.setCombat(id, combat));
     Battle.init(this.socket);
     this.socket.on('notice', ({ msg, big }) => toast(msg, big));
     this.socket.on('boss:state', ({ boss, nextIn }) => { BOSS_NEXT = nextIn != null ? Date.now() + nextIn : null; this.setBoss(boss); });
@@ -511,7 +512,9 @@ class WorldScene extends Phaser.Scene {
     if (this.others.has(p.id)) return;
     const shadow = this.add.image(p.x, p.y + 12, 'shadow').setDepth(8);
     const sprite = this.add.sprite(p.x, p.y, 'other').setDepth(9);
-    this.others.set(p.id, { sprite, shadow, name: p.username, label: this.label(p.username) });
+    const o = { sprite, shadow, name: p.username, label: this.label(p.username), tag: this.combatTag(), combat: null };
+    this.others.set(p.id, o);
+    this.setCombat(p.id, p.combat);
   }
 
   // ----- Click-to-move: BFS nos tiles + suavização por linha de visão -----
@@ -625,13 +628,28 @@ class WorldScene extends Phaser.Scene {
 
   destroyWild(w) { this.tweens.killTweensOf(w.img); w.img.destroy(); w.shadow.destroy(); w.label.destroy(); }
 
+  // Etiqueta vermelha "EM COMBATE" acima do nome (escondida por padrão; pisca para chamar atenção)
+  combatTag() {
+    const tag = this.add.text(0, 0, '⚔ EM COMBATE', { fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: '11px', fontStyle: 'bold', color: '#fff', backgroundColor: '#e53950ee', padding: { x: 6, y: 2 } })
+      .setOrigin(0.5).setDepth(21).setVisible(false);
+    this.tweens.add({ targets: tag, alpha: 0.65, yoyo: true, repeat: -1, duration: 650 });
+    return tag;
+  }
+
+  setCombat(id, combat) {
+    const o = this.others.get(id);
+    if (!o) return;
+    o.combat = combat || null;
+    o.tag.setVisible(!!combat).setText(combat === 'raid' ? '⚔ EM RAID' : '⚔ EM COMBATE');
+  }
+
   // Balão de fala sobre o jogador que mandou a mensagem (global ou de grupo), some em ~5 s
   showBubble(m) {
     const target = m.fromId === MY_ID ? this.player : this.others.get(m.fromId)?.sprite;
     if (!target) return;
     this.bubbles.get(m.fromId)?.obj.destroy();
     const txt = m.text.length > 60 ? m.text.slice(0, 57) + '…' : m.text;
-    const obj = this.add.text(target.x, target.y - 46, txt, { fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: '12px', color: '#0b1020', backgroundColor: '#ffffffee', padding: { x: 8, y: 5 }, wordWrap: { width: 170 }, align: 'center' }).setOrigin(0.5, 1).setDepth(40);
+    const obj = this.add.text(target.x, target.y - 66, txt, { fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: '12px', color: '#0b1020', backgroundColor: '#ffffffee', padding: { x: 8, y: 5 }, wordWrap: { width: 170 }, align: 'center' }).setOrigin(0.5, 1).setDepth(40);
     this.bubbles.set(m.fromId, { obj, target, until: this.time.now + 5500 });
   }
 
@@ -641,14 +659,14 @@ class WorldScene extends Phaser.Scene {
     const dot = (px, py, col, r) => { c.fillStyle = col; c.beginPath(); c.arc((px / TILE) * k, (py / TILE) * k, r, 0, Math.PI * 2); c.fill(); };
     if (BOSS) { c.lineWidth = 1.5; c.strokeStyle = '#fff'; dot(BOSS.x, BOSS.y, '#f0b400', 4.2); c.stroke(); }
     this.wilds.forEach((w) => dot(w.img.x, w.img.y, w.water ? '#5ec8ff' : '#ffb02e', 1.8));
-    this.others.forEach((o) => dot(o.sprite.x, o.sprite.y, '#4da3ff', 2.5));
+    this.others.forEach((o) => dot(o.sprite.x, o.sprite.y, o.combat ? '#ff4d5e' : '#4da3ff', 2.5));
     c.lineWidth = 1.5; c.strokeStyle = '#fff'; dot(this.player.x, this.player.y, '#ff4d5e', 3.2); c.stroke();
   }
 
   update(time, delta) {
     if (!this.player) return;
     this.bubbles.forEach((b, id) => { // balões acompanham quem falou
-      if (!b.target.active || this.time.now > b.until) { b.obj.destroy(); this.bubbles.delete(id); } else b.obj.setPosition(b.target.x, b.target.y - 46);
+      if (!b.target.active || this.time.now > b.until) { b.obj.destroy(); this.bubbles.delete(id); } else b.obj.setPosition(b.target.x, b.target.y - 66);
     });
     const k = this.keys;
     let vx = (k.D.isDown || k.RIGHT.isDown ? 1 : 0) - (k.A.isDown || k.LEFT.isDown ? 1 : 0);
@@ -677,7 +695,7 @@ class WorldScene extends Phaser.Scene {
     this.myLabel.setPosition(p.x, p.y - 26);
     this.myShadow.setPosition(p.x, p.y + 12);
     this.wilds.forEach((w) => { w.shadow.setPosition(w.img.x, w.img.y + 14); w.label.setPosition(w.img.x, w.img.y - 34); });
-    this.others.forEach((o) => { o.label.setPosition(o.sprite.x, o.sprite.y - 26); o.shadow.setPosition(o.sprite.x, o.sprite.y + 12); });
+    this.others.forEach((o) => { o.label.setPosition(o.sprite.x, o.sprite.y - 26); o.tag.setPosition(o.sprite.x, o.sprite.y - 44); o.shadow.setPosition(o.sprite.x, o.sprite.y + 12); });
     $('coords').textContent = `${Math.floor(p.x / TILE)}, ${Math.floor(p.y / TILE)}`;
     this.drawMinimap();
 

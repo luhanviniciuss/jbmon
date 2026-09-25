@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1020" />
+  <title>JBMon</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div id="game"></div>
+
+  <!-- Login -->
+  <div id="login" class="screen">
+    <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+    <form class="panel auth" id="loginForm" autocomplete="on">
+      <div class="logo"><span class="ball"></span><h1>JB<span>Mon</span></h1></div>
+      <p class="tag">Explore, capture e encontre treinadores em tempo real.</p>
+      <div class="tabs">
+        <button type="button" class="tab active" data-mode="login">Entrar</button>
+        <button type="button" class="tab" data-mode="register">Criar conta</button>
+        <i class="tab-ind"></i>
+      </div>
+      <label class="field"><span>Usuário</span><input id="user" placeholder="ash_ketchum" autocomplete="username" minlength="3" maxlength="16" required /></label>
+      <label class="field"><span>Senha</span><input id="pass" type="password" placeholder="••••••••" autocomplete="current-password" minlength="4" required /></label>
+      <div id="err" role="alert"></div>
+      <button class="btn primary" id="submitBtn" type="submit">Entrar no mundo</button>
+    </form>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" hidden>
+    <div class="hud-top">
+      <div class="chip glass"><span class="avatar" id="avatar">?</span><b id="hudName">—</b></div>
+      <div class="chip glass plain"><i class="dot"></i><span id="online">1</span> online</div>
+      <div class="chip glass plain" title="Pokébolas"><span class="ball sm"></span><b id="balls">0</b></div>
+      <button class="chip glass btn-icon" id="partyBtn" aria-label="Abrir party"><span class="ball sm"></span><span class="lbl">Party</span><kbd>P</kbd></button>
+    </div>
+
+    <div class="hud-bottom">
+      <div class="minimap glass"><canvas id="minimap" width="150" height="150"></canvas><span id="coords">0, 0</span></div>
+      <div class="hint glass">Clique/toque para andar · encoste num Pokémon selvagem para batalhar · P party</div>
+    </div>
+  </div>
+
+  <!-- Party drawer -->
+  <aside id="drawer" class="drawer glass" aria-hidden="true">
+    <header><h2>Sua Party</h2><button class="close" id="closeParty" aria-label="Fechar">✕</button></header>
+    <div id="partyList" class="list"></div>
+  </aside>
+
+  <!-- Batalha -->
+  <div id="battle" class="battle" hidden>
+    <div class="b-field">
+      <div class="b-card foe glass"><div class="b-name"><b id="foeName"></b><span class="lv" id="foeLv"></span></div><div class="hpbar"><i id="foeHp"></i></div></div>
+      <div class="platform foe-plat"></div><img id="foeImg" class="b-sprite foe-sprite" alt="" />
+      <div class="platform my-plat"></div><img id="myImg" class="b-sprite my-sprite" alt="" />
+      <div class="b-card mine glass"><div class="b-name"><b id="myName"></b><span class="lv" id="myLv"></span></div><div class="hpbar"><i id="myHp"></i></div><div class="hp-txt" id="myHpTxt"></div><div class="xpbar"><i id="myXp"></i></div></div>
+      <div id="ballFx" class="ball"></div>
+    </div>
+    <div class="b-panel glass">
+      <p id="bMsg"></p>
+      <div class="b-actions" id="bActions">
+        <button class="act a1" data-act="attack">Investida<small>1</small></button>
+        <button class="act a2" data-act="strong">Golpe Forte<small>2</small></button>
+        <button class="act a3" data-act="ball"><span class="ball sm"></span>Pokébola <em id="bBalls">0</em><small>3</small></button>
+        <button class="act a4" data-act="run">Fugir<small>4</small></button>
+      </div>
+      <button class="btn primary" id="bContinue" hidden>Continuar</button>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+  <div id="offline" class="screen" hidden><div class="panel"><h2 id="offTitle">Conexão perdida</h2><p id="offMsg">Tentando reconectar…</p><button class="btn primary" onclick="location.reload()">Recarregar</button></div></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/map.js"></script>
+  <script src="/species.js"></script>
+  <script src="/game.js"></script>
+  <script src="/battle.js"></script>
+</body>
+</html>

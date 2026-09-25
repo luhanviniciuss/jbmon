@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
   <meta name="theme-color" content="#0b1020" />
   <title>JBMon</title>
   <link rel="stylesheet" href="/style.css" />
@@ -21,7 +21,7 @@
         <button type="button" class="tab" data-mode="register">Criar conta</button>
         <i class="tab-ind"></i>
       </div>
-      <label class="field"><span>Usuário</span><input id="user" placeholder="ash_ketchum" autocomplete="username" minlength="3" maxlength="16" required /></label>
+      <label class="field"><span>Usuário</span><input id="user" placeholder="ash_ketchum" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="16" pattern="[A-Za-z0-9_]{3,16}" title="3 a 16 letras, números ou _" required /></label>
       <label class="field"><span>Senha</span><input id="pass" type="password" placeholder="••••••••" autocomplete="current-password" minlength="4" required /></label>
       <div id="err" role="alert"></div>
       <button class="btn primary" id="submitBtn" type="submit">Entrar no mundo</button>
@@ -32,17 +32,22 @@
   <div id="hud" hidden>
     <div class="hud-top">
       <div class="chip glass"><span class="avatar" id="avatar">?</span><b id="hudName">—</b></div>
-      <div class="chip glass plain"><i class="dot"></i><span id="online">1</span> online</div>
+      <div class="chip glass plain"><i class="dot"></i><span id="online">1</span><span class="lbl">&nbsp;online</span></div>
       <div class="chip glass plain" title="Pokébolas"><span class="ball sm"></span><b id="balls">0</b></div>
-      <button class="chip glass btn-icon" id="partyBtn" aria-label="Abrir party"><span class="ball sm"></span><span class="lbl">Party</span><kbd>P</kbd></button>
-      <button class="chip glass btn-icon nomargin" id="bagBtn" aria-label="Abrir bolsa"><span class="lbl">🎒 Bolsa</span><kbd>B</kbd></button>
-      <button class="chip glass btn-icon nomargin" id="groupBtn" aria-label="Abrir grupo"><span class="lbl">👥 Grupo</span><kbd>G</kbd></button>
-      <button class="chip glass btn-icon nomargin boss-chip" id="bossChip" hidden></button>
+      <button class="chip glass boss-chip" id="bossChip" hidden></button>
+    </div>
+
+    <!-- Botões de ação: colunas flutuantes no polegar (celular) / barra no topo (desktop) -->
+    <div class="hud-actions">
+      <button class="fab glass" id="partyBtn" aria-label="Abrir equipe"><span class="ic"><span class="ball sm"></span></span><span class="lbl">Party</span><kbd>P</kbd></button>
+      <button class="fab glass" id="bagBtn" aria-label="Abrir bolsa"><span class="ic">🎒</span><span class="lbl">Bolsa</span><kbd>B</kbd></button>
+      <button class="fab glass" id="groupBtn" aria-label="Abrir grupo"><span class="ic">👥</span><span class="lbl">Grupo</span><kbd>G</kbd></button>
+      <button class="fab glass" id="chatBtn" aria-label="Abrir chat"><span class="ic">💬</span><span class="lbl">Chat</span><kbd>Enter</kbd><i class="badge" id="chatBadge" hidden>0</i></button>
     </div>
 
     <div class="hud-bottom">
       <div class="minimap glass"><canvas id="minimap" width="150" height="150"></canvas><span id="coords">0, 0</span></div>
-      <div class="hint glass">Clique/toque para andar · encoste num Pokémon selvagem para batalhar · P party</div>
+      <div class="hint glass">Clique/toque para andar · encoste num Pokémon selvagem para batalhar · Enter abre o chat</div>
     </div>
   </div>
 
@@ -104,6 +109,23 @@
       <button class="btn primary" id="bContinue" hidden>Continuar</button>
     </div>
   </div>
+
+  <!-- Chat -->
+  <section id="chat" class="glass" hidden aria-label="Chat">
+    <header>
+      <div class="ctabs">
+        <button class="ctab active" data-ch="global" type="button">Global<i class="udot" hidden></i></button>
+        <button class="ctab" data-ch="group" type="button" hidden>Grupo<i class="udot" hidden></i></button>
+      </div>
+      <button class="cbtn" id="chatMin" type="button" aria-label="Recolher chat">▾</button>
+      <button class="cbtn cclose" id="chatClose" type="button" aria-label="Fechar chat">✕</button>
+    </header>
+    <div id="chatLog" class="chat-log" role="log" aria-live="polite"></div>
+    <form id="chatForm" class="chat-form" autocomplete="off">
+      <input id="chatInput" maxlength="200" placeholder="Mensagem  ·  /w nome  ·  /g grupo" enterkeyhint="send" autocomplete="off" autocapitalize="sentences" />
+      <button class="btn small" type="submit">Enviar</button>
+    </form>
+  </section>
 
   <div id="toasts"></div>
   <div id="offline" class="screen" hidden><div class="panel"><h2 id="offTitle">Conexão perdida</h2><p id="offMsg">Tentando reconectar…</p><button class="btn primary" onclick="location.reload()">Recarregar</button></div></div>

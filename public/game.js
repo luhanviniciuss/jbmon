@@ -6,6 +6,7 @@ let MY_ID = null;
 let GROUP = null; // { id, leader, members:[{id, username}] }
 let BOSS = null; // { species_id, x, y, until }
 let BOSS_NEXT = null; // timestamp local do próximo boss
+const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const typeChips = (id) => SPECIES[id].types.map((t) => '<span class="tchip" style="--tc:' + TYPES[t].color + '">' + TYPES[t].label + '</span>').join('');
 let INV = { poke: 0, great: 0, ultra: 0, master: 0 };
 const invTotal = (i) => Object.values(i).reduce((a, b) => a + b, 0);
@@ -54,6 +55,7 @@ $('loginForm').addEventListener('submit', async (e) => {
     $('avatar').textContent = body.username[0];
     $('login').hidden = true;
     $('hud').hidden = false;
+    initChat();
     startGame();
   } catch (err) {
     $('err').textContent = err.message === 'Failed to fetch' ? 'Servidor indisponível' : err.message;
@@ -177,10 +179,16 @@ async function openBag(open = !$('bag').classList.contains('open')) {
 $('bagBtn').addEventListener('click', () => openBag());
 
 // ---------- Grupo ----------
+function setGroupLabel() {
+  $('groupBtn').querySelector('.lbl').textContent = GROUP ? 'Grupo ' + GROUP.members.length + '/4' : 'Grupo';
+  const tab = document.querySelector('.ctab[data-ch=group]');
+  if (tab) { tab.hidden = !GROUP; if (!GROUP && chat.tab === 'group') setChatTab('global'); }
+}
+
 function renderGroup() {
   const leader = !GROUP || GROUP.leader === MY_ID;
   const members = GROUP
-    ? GROUP.members.map((m) => '<div class="item gm"><span class="avatar sm">' + m.username[0] + '</span><div><b>' + m.username + (m.id === GROUP.leader ? ' 👑' : '') + (m.id === MY_ID ? ' (você)' : '') + '</b></div></div>').join('')
+    ? GROUP.members.map((m) => '<div class="item gm"><span class="avatar sm">' + esc(m.username[0]) + '</span><div><b>' + esc(m.username) + (m.id === GROUP.leader ? ' 👑' : '') + (m.id === MY_ID ? ' (você)' : '') + '</b></div></div>').join('')
     : '<p class="empty">Você não está em um grupo.</p>';
   $('groupBody').innerHTML =
     '<div class="section-title">Seu grupo' + (GROUP ? ' (' + GROUP.members.length + '/4)' : '') + '</div>' + members +
@@ -194,7 +202,7 @@ function renderGroup() {
   $('invName')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('invSend').click(); });
   if (leader) window.worldScene?.socket.emit('online:list');
   window.__sendInvite = send;
-  $('groupBtn').querySelector('.lbl').textContent = GROUP ? '👥 Grupo ' + GROUP.members.length + '/4' : '👥 Grupo';
+  setGroupLabel();
 }
 function openGroup(open = !$('group').classList.contains('open')) {
   $('group').classList.toggle('open', open);
@@ -227,6 +235,7 @@ $('closeBag').addEventListener('click', () => openBag(false));
 $('closeParty').addEventListener('click', () => openParty(false));
 window.addEventListener('keydown', (e) => {
   if (!token || inBattle || document.activeElement.tagName === 'INPUT') return;
+  if (e.key === 'Enter') { e.preventDefault(); openChat(true, true); return; }
   if (e.key.toLowerCase() === 'p') openParty();
   if (e.key.toLowerCase() === 'b') openBag();
   if (e.key.toLowerCase() === 'g') openGroup();
@@ -243,9 +252,111 @@ function buildMinimap(mapData) {
   return off;
 }
 
+// ---------- Chat ----------
+const chat = { tab: 'global', msgs: { global: [], group: [] }, unread: { global: 0, group: 0 } };
+const mobileMQ = matchMedia('(max-width: 640px)');
+const hueOf = (t) => { let h = 0; for (const c of t) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+const isChatVisible = () => { const c = $('chat'); return c.classList.contains('open') && !c.classList.contains('min') && !c.classList.contains('gone'); };
+
+function chatLine(m) {
+  const el = document.createElement('div');
+  el.className = 'cm' + (m.ch === 'group' ? ' g' : m.ch === 'w' ? ' w' : '') + (m.fromId === MY_ID ? ' me' : '');
+  const t = document.createElement('span');
+  t.className = 't';
+  t.textContent = new Date(m.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  el.append(t);
+  if (m.ch === 'group') { const g = document.createElement('span'); g.className = 'tag'; g.textContent = '[Grupo]'; el.append(g); }
+  const who = document.createElement('b');
+  who.textContent = m.ch === 'w' ? (m.fromId === MY_ID ? 'para ' + m.to : m.from + ' sussurra') : m.from;
+  who.style.color = 'hsl(' + hueOf(m.from) + ', 75%, 72%)';
+  if (m.fromId !== MY_ID) who.addEventListener('click', () => { $('chatInput').value = '/w ' + m.from + ' '; $('chatInput').focus(); });
+  el.append(who, document.createTextNode(m.text)); // textContent: nunca interpreta HTML
+  return el;
+}
+function renderChat() {
+  const log = $('chatLog');
+  log.replaceChildren(...chat.msgs[chat.tab].map(chatLine));
+  log.scrollTop = log.scrollHeight;
+}
+function updateChatBadges() {
+  const n = chat.unread.global + chat.unread.group;
+  $('chatBadge').hidden = n === 0;
+  $('chatBadge').textContent = n > 9 ? '9+' : n;
+  document.querySelector('.ctab[data-ch=global] .udot').hidden = !chat.unread.global || chat.tab === 'global';
+  document.querySelector('.ctab[data-ch=group] .udot').hidden = !chat.unread.group || chat.tab === 'group';
+}
+function addChat(m) {
+  const ch = m.ch === 'group' ? 'group' : 'global'; // sussurros aparecem na aba Global
+  const list = chat.msgs[ch];
+  list.push(m);
+  if (list.length > 120) list.shift();
+  const log = $('chatLog');
+  if (ch === chat.tab) {
+    const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 60;
+    log.append(chatLine(m));
+    while (log.childElementCount > 120) log.firstElementChild.remove();
+    if (nearBottom || m.fromId === MY_ID) log.scrollTop = log.scrollHeight;
+  }
+  if (m.fromId !== MY_ID && !(isChatVisible() && ch === chat.tab)) { chat.unread[ch]++; updateChatBadges(); }
+  if (m.ch !== 'w') window.worldScene?.showBubble(m);
+}
+function setChatTab(tab) {
+  chat.tab = tab;
+  chat.unread[tab] = 0;
+  document.querySelectorAll('.ctab').forEach((b) => b.classList.toggle('active', b.dataset.ch === tab));
+  updateChatBadges();
+  renderChat();
+}
+function openChat(open = true, focus = false) {
+  const c = $('chat');
+  if (c.classList.contains('gone')) return;
+  if (open) {
+    c.classList.add('open');
+    c.classList.remove('min');
+    chat.unread[chat.tab] = 0;
+    updateChatBadges();
+    const log = $('chatLog');
+    log.scrollTop = log.scrollHeight;
+    if (focus) $('chatInput').focus();
+  } else {
+    $('chatInput').blur();
+    if (mobileMQ.matches) c.classList.remove('open'); else c.classList.add('min');
+  }
+}
+// Durante batalhas o chat some (a tela de batalha ocupa tudo) e volta ao terminar
+function chatBattle(on) {
+  $('chat').classList.toggle('gone', on);
+  if (on) $('chatInput').blur();
+}
+function initChat() {
+  $('chat').hidden = false;
+  const layout = () => { const c = $('chat'); if (mobileMQ.matches) { c.classList.remove('open', 'min'); } else c.classList.add('open'); };
+  layout();
+  mobileMQ.addEventListener('change', layout);
+  $('chatBtn').addEventListener('click', () => (isChatVisible() ? openChat(false) : openChat(true, true)));
+  $('chatMin').addEventListener('click', () => openChat(false));
+  $('chatClose').addEventListener('click', () => openChat(false));
+  document.querySelectorAll('.ctab').forEach((b) => b.addEventListener('click', () => setChatTab(b.dataset.ch)));
+  $('chatInput').addEventListener('keydown', (e) => { if (e.key === 'Escape') openChat(false); });
+  // Digitar no chat não pode mover o personagem (WASD/setas ficam desligados no Phaser enquanto o campo está ativo)
+  $('chatInput').addEventListener('focus', () => { const k = window.worldScene?.input.keyboard; if (k) { k.enabled = false; k.resetKeys(); } });
+  $('chatInput').addEventListener('blur', () => { const k = window.worldScene?.input.keyboard; if (k) k.enabled = true; });
+  $('chatForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const raw = $('chatInput').value.trim();
+    if (!raw) return;
+    const w = raw.match(/^\/(?:w|msg|t)\s+(\S+)\s+([\s\S]+)$/i);
+    const payload = w ? { ch: 'w', to: w[1], text: w[2] } : /^\/g\s+/i.test(raw) ? { ch: 'group', text: raw.replace(/^\/g\s+/i, '') } : { ch: chat.tab, text: raw };
+    window.worldScene?.socket.emit('chat:send', payload);
+    $('chatInput').value = '';
+  });
+  setGroupLabel();
+  renderChat();
+}
+
 // ---------- Phaser ----------
 class WorldScene extends Phaser.Scene {
-  constructor() { super('World'); this.others = new Map(); this.wilds = new Map(); this.monWait = {}; this.lastSent = 0; }
+  constructor() { super('World'); this.others = new Map(); this.wilds = new Map(); this.bubbles = new Map(); this.monWait = {}; this.lastSent = 0; }
 
   create() {
     this.makeTextures();
@@ -299,10 +410,13 @@ class WorldScene extends Phaser.Scene {
       this.others.delete(id);
     });
     window.worldScene = this;
+    this.socket.on('chat:history', (list) => { chat.msgs.global = list.slice(); if (chat.tab === 'global') renderChat(); });
+    this.socket.on('chat:msg', addChat);
+    this.socket.on('chat:error', (m) => toast(m));
     Battle.init(this.socket);
     this.socket.on('notice', ({ msg, big }) => toast(msg, big));
     this.socket.on('boss:state', ({ boss, nextIn }) => { BOSS_NEXT = nextIn != null ? Date.now() + nextIn : null; this.setBoss(boss); });
-    this.socket.on('group:update', (gr) => { GROUP = gr; $('groupBtn').querySelector('.lbl').textContent = gr ? '👥 Grupo ' + gr.members.length + '/4' : '👥 Grupo'; if ($('group').classList.contains('open')) renderGroup(); });
+    this.socket.on('group:update', (gr) => { GROUP = gr; setGroupLabel(); if ($('group').classList.contains('open')) renderGroup(); });
     this.socket.on('group:invited', ({ from }) => {
       $('inviteTxt').textContent = from + ' convidou você para um grupo';
       $('invite').hidden = false;
@@ -311,11 +425,12 @@ class WorldScene extends Phaser.Scene {
     });
     this.socket.on('online:list', (names) => {
       const box = $('onlineList');
-      if (box) box.innerHTML = names.length ? names.map((n) => '<button data-n="' + n + '">' + n + '</button>').join('') : '<span class="hintline">Ninguém disponível agora.</span>';
+      if (box) box.innerHTML = names.length ? names.map((n) => '<button data-n="' + esc(n) + '">' + esc(n) + '</button>').join('') : '<span class="hintline">Ninguém disponível agora.</span>';
       box?.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => window.__sendInvite(b.dataset.n)));
     });
     this.socket.on('raid:start', (d) => {
       inBattle = true;
+      chatBattle(true);
       this.player?.setVelocity(0, 0);
       this.cameras.main.flash(500, 255, 215, 0);
       this.cameras.main.shake(400, 0.008);
@@ -329,6 +444,7 @@ class WorldScene extends Phaser.Scene {
     this.socket.on('wild:update', (arr) => arr.forEach(({ id, x, y }) => { const w = this.wilds.get(id); if (w) this.tweens.add({ targets: w.img, x, y, duration: 900 }); }));
     this.socket.on('battle:start', (d) => {
       inBattle = true;
+      chatBattle(true);
       this.player?.setVelocity(0, 0);
       this.cameras.main.flash(350, 255, 255, 255);
       this.cameras.main.shake(300, 0.006);
@@ -509,6 +625,16 @@ class WorldScene extends Phaser.Scene {
 
   destroyWild(w) { this.tweens.killTweensOf(w.img); w.img.destroy(); w.shadow.destroy(); w.label.destroy(); }
 
+  // Balão de fala sobre o jogador que mandou a mensagem (global ou de grupo), some em ~5 s
+  showBubble(m) {
+    const target = m.fromId === MY_ID ? this.player : this.others.get(m.fromId)?.sprite;
+    if (!target) return;
+    this.bubbles.get(m.fromId)?.obj.destroy();
+    const txt = m.text.length > 60 ? m.text.slice(0, 57) + '…' : m.text;
+    const obj = this.add.text(target.x, target.y - 46, txt, { fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: '12px', color: '#0b1020', backgroundColor: '#ffffffee', padding: { x: 8, y: 5 }, wordWrap: { width: 170 }, align: 'center' }).setOrigin(0.5, 1).setDepth(40);
+    this.bubbles.set(m.fromId, { obj, target, until: this.time.now + 5500 });
+  }
+
   drawMinimap() {
     const S = 150, k = S / MAP_W, c = this.miniCtx;
     c.drawImage(this.mini, 0, 0, S, S);
@@ -521,6 +647,9 @@ class WorldScene extends Phaser.Scene {
 
   update(time, delta) {
     if (!this.player) return;
+    this.bubbles.forEach((b, id) => { // balões acompanham quem falou
+      if (!b.target.active || this.time.now > b.until) { b.obj.destroy(); this.bubbles.delete(id); } else b.obj.setPosition(b.target.x, b.target.y - 46);
+    });
     const k = this.keys;
     let vx = (k.D.isDown || k.RIGHT.isDown ? 1 : 0) - (k.A.isDown || k.LEFT.isDown ? 1 : 0);
     let vy = (k.S.isDown || k.DOWN.isDown ? 1 : 0) - (k.W.isDown || k.UP.isDown ? 1 : 0);

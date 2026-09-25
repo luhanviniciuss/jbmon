@@ -11,6 +11,7 @@ const { SPECIES, WILD_TABLE, WATER_TABLE, calcStats, minLevel } = require('../pu
 const { BALLS, RECIPES } = require('../public/items.js');
 const { pickSpecies, makeWild, resolveTurn, mineView, wildView, teamView } = require('./battle.js');
 const createRaidSystem = require('./raid.js');
+const createChat = require('./chat.js');
 const { retry, durable, flushPending, pendingCount } = require('./durable.js');
 const { loadTeam, nextFreeSlot, partyOf } = require('./team.js');
 const { startBackups } = require('./backup.js');
@@ -145,8 +146,8 @@ function auth(req, res, next) {
 
 app.post('/api/register', async (req, res) => {
   const { username, password } = req.body || {};
-  if (!username || !password || username.length < 3 || username.length > 16 || password.length < 4) {
-    return res.status(400).json({ error: 'Usuário (3-16) e senha (mín. 4) obrigatórios' });
+  if (typeof username !== 'string' || typeof password !== 'string' || !/^[A-Za-z0-9_]{3,16}$/.test(username) || password.length < 4) {
+    return res.status(400).json({ error: 'Usuário: 3 a 16 letras, números ou _. Senha: mínimo 4 caracteres' });
   }
   try {
     const sid = STARTERS[Math.floor(Math.random() * STARTERS.length)];
@@ -251,6 +252,8 @@ const raidSys = createRaidSystem({
   setBusy: (uid, v) => (v ? battlingUsers.add(uid) : battlingUsers.delete(uid)),
 });
 
+const chat = createChat({ io, socketByUser, meByUser, groupMembers: raidSys.groupMembers });
+
 io.use(async (socket, next) => {
   try {
     const { id } = jwt.verify(socket.handshake.auth.token, JWT_SECRET);
@@ -274,6 +277,7 @@ io.on('connection', (socket) => {
   socketByUser.set(u.id, socket);
   meByUser.set(u.id, me);
   raidSys.bind(socket, u.id);
+  chat.bind(socket, u.id);
 
   socket.emit('players:init', {
     self: me,

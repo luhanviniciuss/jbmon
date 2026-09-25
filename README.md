@@ -13,6 +13,7 @@ public/species.js      Espécies, raridades, evoluções e tabela de encontros (
 public/items.js        Pokébolas, materiais e receitas de craft (compartilhado)
 server/battle.js       Regras de batalha, tipos, dano, captura, EXP
 server/raid.js         Grupos, boss lendário a cada 3 h e raid cooperativa
+server/chat.js         Chat global, de grupo e sussurros
 server/durable.js      Gravações com retry e fila durável
 server/backup.js       Backup periódico do banco
 deploy/                Arquivos para VPS (systemd e Caddy); veja DEPLOY.md
@@ -55,6 +56,18 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 - **Fase 1, a luta**: cada membro age na sua vez (25 s por turno) com o Pokémon ativo; o boss revida em quem atacou. O boss é sempre **Lv.100** (avisa se a média do grupo for baixa) e a vida é multiplicada. Se todos forem eliminados, o boss vence e o grupo volta curado ao Centro.
 - **Fase 2, a captura**: ao chegar em 15% de HP o boss fica **exausto** e ainda tem vida. Todos ganham muito EXP (a equipe inteira, com evolução) e materiais, e **cada membro tem UMA rodada para lançar uma Pokébola** (bônus de captura ×3 no boss exausto; a Master Ball é garantida). Quem capturar leva o lendário; se ninguém conseguir, ele foge.
 - **Testar sem esperar 3 h**: variáveis de ambiente `BOSS_FIRST_DELAY_MIN`, `BOSS_INTERVAL_MIN` e `BOSS_LIFETIME_MIN` (ex.: `BOSS_FIRST_DELAY_MIN=0.1 npm run dev`). A lógica está em `server/raid.js`.
+
+## Chat
+- **Canais**: **Global** (todos os jogadores online), **Grupo** (só os membros do seu grupo; a aba aparece quando você está em um) e **sussurro** privado com `/w nome mensagem`. Atalho `/g mensagem` fala com o grupo. Clique no nome de alguém para sussurrar para ele.
+- **Como usar**: no PC o painel fica ao lado do minimapa (recolhe com ▾; **Enter** foca o campo). No celular ele é uma gaveta que abre pelo botão 💬 (com contador de mensagens não lidas). Digitar no chat **não move** o personagem. Durante batalhas o chat se esconde e volta ao terminar.
+- **Balões de fala**: a mensagem global/de grupo aparece sobre a cabeça de quem falou por ~5 s.
+- **Proteções** (`server/chat.js`): até 200 caracteres, caracteres de controle removidos, limite de 5 mensagens seguidas (depois 1 a cada 1,5 s), remetente sempre definido pelo servidor. O histórico do global (últimas 60) fica só na memória e não vai para o banco. O cliente exibe tudo como texto puro (nunca HTML).
+- **Nome de usuário**: agora só aceita letras, números e `_` (3 a 16), porque o nome aparece em muitos pontos da interface. Contas antigas continuam funcionando.
+
+## Interface responsiva (mobile-first)
+- **Celular** (até 640 px): HUD compacto no topo; Party, Bolsa, Grupo e Chat viram **botões flutuantes de 52 px** no canto inferior direito (alcance do polegar); equipe, bolsa e grupo abrem como gaveta inferior; alvos de toque ≥ 44 px; campos com fonte de 16 px (o iPhone não dá zoom ao digitar); respeita a área segura (notch) e o teclado virtual não cobre o chat (`interactive-widget=resizes-content`).
+- **Desktop**: botões em pílulas no topo direito com os atalhos (P, B, G, Enter) e chat fixo.
+- Toda tela nova deve ser pensada primeiro para ~375 px e testada nos dois tamanhos.
 
 ## Como funciona
 - **Auth**: `POST /api/register|login` devolve um JWT, usado no handshake do Socket.io e na API (`GET /api/party`).

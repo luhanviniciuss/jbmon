@@ -201,7 +201,7 @@ const Battle = (() => {
   function renderRaidBar(s) {
     $('raidBar').innerHTML = s.members.map((m) => {
       const pct = Math.max(0, (m.mine.hp / m.mine.maxHp) * 100);
-      return `<div class="rm${s.turn && s.turn.uid === m.id ? ' turn' : ''}${m.eliminated || m.left ? ' out' : ''}"><b>${m.username}${m.id === MY_ID ? ' •' : ''}</b><i><u style="width:${pct}%"></u></i></div>`;
+      return `<div class="rm${s.turn && s.turn.uid === m.id ? ' turn' : ''}${m.eliminated || m.left ? ' out' : ''}"><b>${esc(m.username)}${m.id === MY_ID ? ' •' : ''}</b><i><u style="width:${pct}%"></u></i></div>`;
     }).join('');
   }
 
@@ -281,6 +281,7 @@ const Battle = (() => {
     $('battle').hidden = true;
     active = false;
     inBattle = false;
+    chatBattle(false);
     mode = 'wild';
   }
 
@@ -319,7 +320,7 @@ const Battle = (() => {
   $('swBack').addEventListener('click', () => showPanel('actions'));
   $('bContinue').addEventListener('click', close);
   window.addEventListener('keydown', (e) => {
-    if (!active) return;
+    if (!active || document.activeElement?.tagName === 'INPUT') return;
     if (!$('bContinue').hidden) { if (e.key === 'Enter' || e.key === ' ') close(); return; }
     if (switchOpen()) { // teclas 1-6 escolhem o Pokémon; Esc volta (exceto quando a escolha é obrigatória)
       if ((e.key === 'Escape' || e.key === 'Backspace') && !$('swBack').hidden) showPanel('actions');

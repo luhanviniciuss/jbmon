@@ -474,5 +474,5 @@ module.exports = function createRaidSystem(ctx) {
     invites.delete(uid);
   }
 
-  return { bind, onDisconnect, onMove: (uid) => tryStart(uid), inRaid: (uid) => raids.has(uid) };
+  return { bind, onDisconnect, onMove: (uid) => tryStart(uid), inRaid: (uid) => raids.has(uid), groupMembers: (uid) => { const g = groups.get(groupOf.get(uid)); return g ? [...g.members] : []; } };
 };

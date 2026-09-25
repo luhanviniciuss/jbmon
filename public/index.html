@@ -35,6 +35,7 @@
       <div class="chip glass plain"><i class="dot"></i><span id="online">1</span> online</div>
       <div class="chip glass plain" title="Pokébolas"><span class="ball sm"></span><b id="balls">0</b></div>
       <button class="chip glass btn-icon" id="partyBtn" aria-label="Abrir party"><span class="ball sm"></span><span class="lbl">Party</span><kbd>P</kbd></button>
+      <button class="chip glass btn-icon nomargin" id="bagBtn" aria-label="Abrir bolsa"><span class="lbl">🎒 Bolsa</span><kbd>B</kbd></button>
     </div>
 
     <div class="hud-bottom">
@@ -49,10 +50,16 @@
     <div id="partyList" class="list"></div>
   </aside>
 
+  <!-- Bolsa / Craft -->
+  <aside id="bag" class="drawer glass" aria-hidden="true">
+    <header><h2>Bolsa</h2><button class="close" id="closeBag" aria-label="Fechar">✕</button></header>
+    <div id="bagBody" class="list"></div>
+  </aside>
+
   <!-- Batalha -->
   <div id="battle" class="battle" hidden>
     <div class="b-field">
-      <div class="b-card foe glass"><div class="b-name"><b id="foeName"></b><span class="lv" id="foeLv"></span></div><div class="hpbar"><i id="foeHp"></i></div></div>
+      <div class="b-card foe glass"><div class="b-name"><b id="foeName"></b><span class="lv" id="foeLv"></span></div><div class="hpbar"><i id="foeHp"></i></div><div class="rar" id="foeRar"></div></div>
       <div class="platform foe-plat"></div><img id="foeImg" class="b-sprite foe-sprite" alt="" />
       <div class="platform my-plat"></div><img id="myImg" class="b-sprite my-sprite" alt="" />
       <div class="b-card mine glass"><div class="b-name"><b id="myName"></b><span class="lv" id="myLv"></span></div><div class="hpbar"><i id="myHp"></i></div><div class="hp-txt" id="myHpTxt"></div><div class="xpbar"><i id="myXp"></i></div></div>
@@ -63,8 +70,15 @@
       <div class="b-actions" id="bActions">
         <button class="act a1" data-act="attack">Investida<small>1</small></button>
         <button class="act a2" data-act="strong">Golpe Forte<small>2</small></button>
-        <button class="act a3" data-act="ball"><span class="ball sm"></span>Pokébola <em id="bBalls">0</em><small>3</small></button>
+        <button class="act a3" data-act="ballmenu"><span class="ball sm"></span>Pokébolas <em id="bBalls">0</em><small>3</small></button>
         <button class="act a4" data-act="run">Fugir<small>4</small></button>
+      </div>
+      <div class="b-actions" id="ballPicker" hidden>
+        <button class="act bl" data-ball="poke"><span class="ball sm t-poke"></span>Pokébola <em>0</em><small>1</small></button>
+        <button class="act bl" data-ball="great"><span class="ball sm t-great"></span>Great Ball <em>0</em><small>2</small></button>
+        <button class="act bl" data-ball="ultra"><span class="ball sm t-ultra"></span>Ultra Ball <em>0</em><small>3</small></button>
+        <button class="act bl" data-ball="master"><span class="ball sm t-master"></span>Master Ball <em>0</em><small>4</small></button>
+        <button class="act a4 wide" id="ballBack">Voltar</button>
       </div>
       <button class="btn primary" id="bContinue" hidden>Continuar</button>
     </div>
@@ -77,6 +91,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="/map.js"></script>
   <script src="/species.js"></script>
+  <script src="/items.js"></script>
   <script src="/game.js"></script>
   <script src="/battle.js"></script>
 </body>

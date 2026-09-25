@@ -2,7 +2,14 @@ const $ = (id) => document.getElementById(id);
 let token = null;
 let mode = 'login';
 let inBattle = false;
-const setBalls = (n) => { $('balls').textContent = n; };
+let INV = { poke: 0, great: 0, ultra: 0, master: 0 };
+const invTotal = (i) => Object.values(i).reduce((a, b) => a + b, 0);
+const rarityOf = (id) => RARITY[SPECIES[id]?.rarity] || RARITY.common;
+const setBalls = (inv) => {
+  INV = typeof inv === 'number' ? { ...INV, poke: inv } : inv;
+  $('balls').textContent = invTotal(INV);
+  $('balls').parentElement.title = Object.entries(INV).map(([k, n]) => BALLS[k].name + ': ' + n).join(' · ');
+};
 
 const GEN1 = 'bulbasaur ivysaur venusaur charmander charmeleon charizard squirtle wartortle blastoise caterpie metapod butterfree weedle kakuna beedrill pidgey pidgeotto pidgeot rattata raticate spearow fearow ekans arbok pikachu raichu sandshrew sandslash nidoran-f nidorina nidoqueen nidoran-m nidorino nidoking clefairy clefable vulpix ninetales jigglypuff wigglytuff zubat golbat oddish gloom vileplume paras parasect venonat venomoth diglett dugtrio meowth persian psyduck golduck mankey primeape growlithe arcanine poliwag poliwhirl poliwrath abra kadabra alakazam machop machoke machamp bellsprout weepinbell victreebel tentacool tentacruel geodude graveler golem ponyta rapidash slowpoke slowbro magnemite magneton farfetchd doduo dodrio seel dewgong grimer muk shellder cloyster gastly haunter gengar onix drowzee hypno krabby kingler voltorb electrode exeggcute exeggutor cubone marowak hitmonlee hitmonchan lickitung koffing weezing rhyhorn rhydon chansey tangela kangaskhan horsea seadra goldeen seaking staryu starmie mr-mime scyther jynx electabuzz magmar pinsir tauros magikarp gyarados lapras ditto eevee vaporeon jolteon flareon porygon omanyte omastar kabuto kabutops aerodactyl snorlax articuno zapdos moltres dratini dragonair dragonite mewtwo mew'.split(' ');
 const speciesName = (id) => GEN1[id - 1] || `#${id}`;
@@ -55,12 +62,14 @@ $('loginForm').addEventListener('submit', async (e) => {
 const statRow = (cls, label, val, max, txt = val) =>
   `<div class="stat ${cls}"><span>${label}</span><div class="bar"><i style="--w:${Math.min(100, (val / max) * 100)}%"></i></div><b>${txt}</b></div>`;
 
-const monCard = (p, i) => `<div class="mon${p.current_hp <= 0 ? ' fainted' : ''}" style="animation-delay:${i * 60}ms">
+const monCard = (p, i) => `<div class="mon${p.current_hp <= 0 ? ' fainted' : ''}" style="animation-delay:${i * 60}ms;--rc:${rarityOf(p.species_id).color}">
   <div class="art"><img src="${spriteUrl(p.species_id)}" alt="" onerror="this.style.opacity=.2" /></div>
   <div><div class="top"><span class="name">${p.nickname || speciesName(p.species_id)}</span><span class="lv">Lv. ${p.level}</span></div>
+  <div class="rar" style="--rc:${rarityOf(p.species_id).color}">${rarityOf(p.species_id).label}</div>
   ${statRow('hp', 'HP', p.current_hp, p.hp, p.current_hp + '/' + p.hp)}${statRow('atk', 'ATK', p.attack, 60)}${statRow('def', 'DEF', p.defense, 60)}${statRow('xp', 'EXP', p.current_exp, p.level * 20)}</div></div>`;
 
 async function openParty(open = !$('drawer').classList.contains('open')) {
+  if (open) $('bag').classList.remove('open');
   const drawer = $('drawer');
   drawer.classList.toggle('open', open);
   drawer.setAttribute('aria-hidden', !open);
@@ -78,11 +87,54 @@ async function openParty(open = !$('drawer').classList.contains('open')) {
   }
 }
 $('partyBtn').addEventListener('click', () => openParty());
+
+// ---------- Bolsa e craft ----------
+async function renderBag() {
+  const res = await fetch('/api/inventory', { headers: { Authorization: 'Bearer ' + token } });
+  const { balls, mats } = await res.json();
+  setBalls(balls);
+  const ballIcon = (k) => '<span class="ball sm t-' + k + '"></span>';
+  const chip = (n, label, ok) => '<span class="cost' + (ok ? '' : ' short') + '">' + n + ' ' + label + '</span>';
+  const matsHtml = Object.entries(MATERIALS).map(([k, m]) => '<div class="mat" title="' + m.hint + '"><b>' + mats[k] + '</b><span>' + m.name + '</span></div>').join('');
+  const ballsHtml = Object.entries(BALLS).map(([k, b]) =>
+    '<div class="item">' + ballIcon(k) + '<div><b>' + b.name + '</b><small>' + (b.guaranteed ? 'captura garantida' : 'captura ×' + b.mult) + '</small></div>' +
+    '<span class="rar" style="--rc:' + RARITY[b.rarity].color + '">' + RARITY[b.rarity].label + '</span><em>' + balls[k] + '</em></div>').join('');
+  const recipesHtml = RECIPES.map((r) => {
+    const can = Object.entries(r.cost).every(([k, n]) => mats[k] >= n);
+    const gives = Object.entries(r.gives).map(([k, n]) => n + '× ' + BALLS[k].name).join(', ');
+    const cost = Object.entries(r.cost).map(([k, n]) => chip(n, MATERIALS[k].name, mats[k] >= n)).join('');
+    return '<div class="recipe"><div>' + ballIcon(Object.keys(r.gives)[0]) + '<b>' + gives + '</b><div class="costs">' + cost + '</div></div>' +
+      '<button class="btn small" data-craft="' + r.id + '"' + (can ? '' : ' disabled') + '>Criar</button></div>';
+  }).join('');
+  $('bagBody').innerHTML = '<div class="section-title">Materiais</div><div class="mats">' + matsHtml + '</div>' +
+    '<div class="section-title">Pokébolas</div>' + ballsHtml +
+    '<div class="section-title">Criar (craft)</div>' + recipesHtml +
+    '<p class="hintline">Derrote ou capture Pokémon selvagens para coletar materiais. Quanto mais raro o Pokémon, mais Fragmentos.</p>';
+  $('bagBody').querySelectorAll('[data-craft]').forEach((b) => b.addEventListener('click', async () => {
+    b.disabled = true;
+    const r = await fetch('/api/craft', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ recipe: b.dataset.craft }) });
+    const body = await r.json();
+    toast(r.ok ? 'Item criado!' : body.error || 'Erro ao criar');
+    renderBag();
+  }));
+}
+async function openBag(open = !$('bag').classList.contains('open')) {
+  const el = $('bag');
+  el.classList.toggle('open', open);
+  el.setAttribute('aria-hidden', !open);
+  if (!open) return;
+  $('drawer').classList.remove('open');
+  $('bagBody').innerHTML = '<p class="empty">Carregando…</p>';
+  try { await renderBag(); } catch { $('bagBody').innerHTML = '<p class="empty">Erro ao carregar a bolsa.</p>'; }
+}
+$('bagBtn').addEventListener('click', () => openBag());
+$('closeBag').addEventListener('click', () => openBag(false));
 $('closeParty').addEventListener('click', () => openParty(false));
 window.addEventListener('keydown', (e) => {
   if (!token || inBattle || document.activeElement.tagName === 'INPUT') return;
   if (e.key.toLowerCase() === 'p') openParty();
-  if (e.key === 'Escape') openParty(false);
+  if (e.key.toLowerCase() === 'b') openBag();
+  if (e.key === 'Escape') { openParty(false); openBag(false); }
 });
 
 // ---------- Minimapa ----------
@@ -160,7 +212,7 @@ class WorldScene extends Phaser.Scene {
       this.player?.setVelocity(0, 0);
       this.cameras.main.flash(350, 255, 255, 255);
       this.cameras.main.shake(300, 0.006);
-      openParty(false);
+      openParty(false); openBag(false);
       setTimeout(() => Battle.start(d), 450);
     });
     this.socket.on('party:healed', ({ balls }) => { setBalls(balls); toast('Centro Pokémon: equipe curada e Pokébolas repostas'); });
@@ -304,13 +356,18 @@ class WorldScene extends Phaser.Scene {
     const name = (typeof SPECIES !== 'undefined' && SPECIES[d.species_id]?.name) || '#' + d.species_id;
     const shadow = this.add.image(d.x, d.y + 14, 'shadow').setDepth(6).setScale(1.2);
     const img = this.add.image(d.x, d.y, 'wilddot').setDepth(7);
-    const label = this.add.text(d.x, d.y - 34, `${name} Lv.${d.level}`, { fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: '11px', fontStyle: 'bold', color: '#fff', backgroundColor: '#b3261ecc', padding: { x: 5, y: 2 } }).setOrigin(0.5).setDepth(19);
+    const rar = rarityOf(d.species_id);
+    const tier = SPECIES[d.species_id]?.rarity;
+    const star = tier === 'epic' || tier === 'legendary' ? '✦ ' : '';
+    const label = this.add.text(d.x, d.y - 34, `${star}${name} Lv.${d.level}`, { fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: '11px', fontStyle: 'bold', color: '#fff', backgroundColor: rar.color + 'e6', padding: { x: 5, y: 2 } }).setOrigin(0.5).setDepth(19);
     const w = { img, shadow, label };
+    if (tier !== 'common') shadow.setTint(Phaser.Display.Color.HexStringToColor(rar.color).color);
+    if (tier === 'epic' || tier === 'legendary') this.tweens.add({ targets: img, alpha: 0.7, yoyo: true, repeat: -1, duration: 700 });
     this.wilds.set(d.id, w);
     this.ensureMon(d.species_id, (key) => { if (img.active) img.setTexture(key).setDisplaySize(60, 60); });
   }
 
-  destroyWild(w) { w.img.destroy(); w.shadow.destroy(); w.label.destroy(); }
+  destroyWild(w) { this.tweens.killTweensOf(w.img); w.img.destroy(); w.shadow.destroy(); w.label.destroy(); }
 
   drawMinimap() {
     const S = 150, k = S / MAP_W, c = this.miniCtx;

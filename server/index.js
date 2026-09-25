@@ -7,7 +7,8 @@ const jwt = require('jsonwebtoken');
 const { Server } = require('socket.io');
 const { PrismaClient } = require('@prisma/client');
 const { MAP_W, TILE, PLAYER_SPEED, CLEAR_MIN, CLEAR_MAX, generateMap } = require('../public/map.js');
-const { calcStats } = require('../public/species.js');
+const { SPECIES, calcStats } = require('../public/species.js');
+const { BALLS, RECIPES } = require('../public/items.js');
 const { pickSpecies, makeWild, resolveTurn, mineView, wildView } = require('./battle.js');
 
 const PORT = process.env.PORT || 3000;
@@ -32,7 +33,8 @@ const WILD_WANDER = 3; // tiles de distância máxima do "lar"
 const TOUCH_RADIUS = 28; // px: encostar num selvagem inicia a batalha
 const RESPAWN_MS = 15000;
 const IMMUNE_MS = 4000; // após uma batalha, ninguém te puxa de novo
-const ACTIONS = ['attack', 'strong', 'ball', 'run'];
+const ACTIONS = ['attack', 'strong', 'run', ...Object.keys(BALLS).map((k) => 'ball:' + k)];
+const LEVEL_BONUS = { common: 0, uncommon: 1, rare: 2, epic: 4, legendary: 0 };
 const HEAL_BALLS = 10; // o Centro Pokémon repõe até esta quantidade
 
 const prisma = new PrismaClient();
@@ -51,13 +53,19 @@ const wildLevelAt = (tx, ty) => Math.max(2, Math.min(40, 2 + Math.floor(Math.hyp
 const wildPublic = (w) => ({ id: w.id, species_id: w.species_id, level: w.level, x: w.x, y: w.y });
 
 function spawnWild() {
+  let id = pickSpecies();
+  // No máximo um de cada lendário vivo no mapa
+  for (let i = 0; i < 10 && SPECIES[id].rarity === 'legendary' && [...wilds.values()].some((w) => w.species_id === id); i++) id = pickSpecies();
+  const rarity = SPECIES[id].rarity;
   let tile;
-  for (let i = 0; i < 50; i++) { // 60% dos spawns perto do centro
+  for (let i = 0; i < 300; i++) {
     tile = grassTiles[rand(0, grassTiles.length - 1)];
-    if (Math.random() < 0.4 || Math.hypot(tile[0] - 50, tile[1] - 50) < 30) break;
+    const d = Math.hypot(tile[0] - 50, tile[1] - 50);
+    if (rarity === 'legendary' ? d >= 40 : Math.random() < 0.4 || d < 30) break; // lendários só longe do centro
   }
   const [tx, ty] = tile;
-  const w = { id: nextWildId++, species_id: pickSpecies(), level: wildLevelAt(tx, ty), tx, ty, homeX: tx, homeY: ty, x: tx * TILE + TILE / 2, y: ty * TILE + TILE / 2, busy: false };
+  const level = rarity === 'legendary' ? 40 + rand(0, 5) : Math.min(50, wildLevelAt(tx, ty) + LEVEL_BONUS[rarity]);
+  const w = { id: nextWildId++, species_id: id, level, tx, ty, homeX: tx, homeY: ty, x: tx * TILE + TILE / 2, y: ty * TILE + TILE / 2, busy: false };
   wilds.set(w.id, w);
   return w;
 }
@@ -82,6 +90,10 @@ setInterval(() => { // vagueiam perto de casa
   }
   if (moved.length) io.emit('wild:update', moved);
 }, 1000);
+
+const invOf = (u) => ({ poke: u.pokeballs, great: u.greatballs, ultra: u.ultraballs, master: u.masterballs });
+const matsOf = (u) => ({ apricorns: u.apricorns, shards: u.shards });
+const battlingUsers = new Set(); // ids em batalha (bloqueia o craft)
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -134,9 +146,28 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/party', auth, async (req, res) => {
   const [pokemons, user] = await Promise.all([
     prisma.pokemon.findMany({ where: { user_id: req.user.id }, orderBy: { id: 'asc' } }),
-    prisma.user.findUnique({ where: { id: req.user.id }, select: { pokeballs: true } }),
+    prisma.user.findUnique({ where: { id: req.user.id } }),
   ]);
-  res.json({ party: pokemons.slice(0, 6), box: pokemons.slice(6), balls: user?.pokeballs ?? 0 });
+  res.json({ party: pokemons.slice(0, 6), box: pokemons.slice(6), balls: invOf(user) });
+});
+
+app.get('/api/inventory', auth, async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+  res.json({ balls: invOf(user), mats: matsOf(user) });
+});
+
+app.post('/api/craft', auth, async (req, res) => {
+  const recipe = RECIPES.find((r) => r.id === req.body?.recipe);
+  if (!recipe) return res.status(400).json({ error: 'Receita inválida' });
+  if (battlingUsers.has(req.user.id)) return res.status(409).json({ error: 'Termine a batalha antes de criar itens' });
+  const cost = { apricorns: recipe.cost.apricorns || 0, shards: recipe.cost.shards || 0 };
+  const data = { apricorns: { decrement: cost.apricorns }, shards: { decrement: cost.shards } };
+  for (const [kind, n] of Object.entries(recipe.gives)) data[BALLS[kind].col] = { increment: n };
+  // updateMany com condição = débito atômico (sem corrida entre dois cliques)
+  const { count } = await prisma.user.updateMany({ where: { id: req.user.id, apricorns: { gte: cost.apricorns }, shards: { gte: cost.shards } }, data });
+  if (!count) return res.status(400).json({ error: 'Materiais insuficientes' });
+  const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+  res.json({ balls: invOf(user), mats: matsOf(user) });
 });
 
 // ---------- Socket.io ----------
@@ -174,7 +205,8 @@ io.on('connection', (socket) => {
 
   socket.emit('players:init', {
     self: me,
-    balls: u.pokeballs,
+    balls: invOf(u),
+    mats: matsOf(u),
     others: [...players.entries()].filter(([sid]) => sid !== socket.id).map(([, p]) => p),
   });
   socket.emit('wild:list', [...wilds.values()].filter((w) => !w.busy).map(wildPublic));
@@ -182,40 +214,49 @@ io.on('connection', (socket) => {
   io.emit('online', players.size);
 
   // ----- Batalha (estado autoritativo no servidor) -----
-  let battle = null; // { team, mine, wild, balls }
+  let battle = null; // { team, mine, wild, world, inv }
+  const setBusy = (v) => (v ? battlingUsers.add(u.id) : battlingUsers.delete(u.id));
   let starting = false;
   let acting = false;
   let lastTile = '';
   let immuneUntil = 0;
   let lastHeal = 0;
 
-  const persist = (b) =>
+  const persist = (b, drops) =>
     prisma.$transaction([
       ...b.team.map((p) =>
         prisma.pokemon.update({
           where: { id: p.id },
-          data: { level: p.level, hp: p.hp, attack: p.attack, defense: p.defense, current_exp: p.current_exp, current_hp: p.current_hp },
+          data: { species_id: p.species_id, level: p.level, hp: p.hp, attack: p.attack, defense: p.defense, current_exp: p.current_exp, current_hp: p.current_hp },
         })
       ),
-      prisma.user.update({ where: { id: u.id }, data: { pokeballs: b.balls } }),
+      prisma.user.update({
+        where: { id: u.id },
+        data: {
+          pokeballs: b.inv.poke, greatballs: b.inv.great, ultraballs: b.inv.ultra, masterballs: b.inv.master,
+          ...(drops ? { apricorns: { increment: drops.apricorns }, shards: { increment: drops.shards } } : {}),
+        },
+      }),
     ]);
 
   async function startBattle(w) {
     starting = true;
+    setBusy(true);
     w.busy = true;
     io.emit('wild:remove', w.id);
     try {
       const team = await prisma.pokemon.findMany({ where: { user_id: u.id }, orderBy: { id: 'asc' }, take: 6 });
       const mine = team.find((p) => p.current_hp > 0);
-      const fresh = await prisma.user.findUnique({ where: { id: u.id }, select: { pokeballs: true } });
+      const fresh = await prisma.user.findUnique({ where: { id: u.id } });
       if (!mine || socket.disconnected) return releaseWild(w);
-      battle = { team, mine, world: w, wild: makeWild(w.species_id, w.level), balls: fresh.pokeballs };
-      socket.emit('battle:start', { wild: wildView(battle.wild), mine: mineView(mine), balls: battle.balls });
+      battle = { team, mine, world: w, wild: makeWild(w.species_id, w.level), inv: invOf(fresh) };
+      socket.emit('battle:start', { wild: wildView(battle.wild), mine: mineView(mine), balls: battle.inv });
     } catch (err) {
       console.error('Falha ao iniciar batalha', err.message);
       releaseWild(w);
     } finally {
       starting = false;
+      if (!battle) setBusy(false);
     }
   }
 
@@ -224,16 +265,16 @@ io.on('connection', (socket) => {
     try {
       const [all, usr] = await Promise.all([
         prisma.pokemon.findMany({ where: { user_id: u.id } }),
-        prisma.user.findUnique({ where: { id: u.id }, select: { pokeballs: true } }),
+        prisma.user.findUnique({ where: { id: u.id } }),
       ]);
       const hurt = all.filter((p) => p.current_hp < p.hp);
       if (!hurt.length && usr.pokeballs >= HEAL_BALLS) return;
-      const balls = Math.max(usr.pokeballs, HEAL_BALLS);
+      const pokeballs = Math.max(usr.pokeballs, HEAL_BALLS);
       await prisma.$transaction([
         ...hurt.map((p) => prisma.pokemon.update({ where: { id: p.id }, data: { current_hp: p.hp } })),
-        prisma.user.update({ where: { id: u.id }, data: { pokeballs: balls } }),
+        prisma.user.update({ where: { id: u.id }, data: { pokeballs } }),
       ]);
-      socket.emit('party:healed', { balls });
+      socket.emit('party:healed', { balls: invOf({ ...usr, pokeballs }) });
     } catch (e) {
       console.error('Falha ao curar', e.message);
     }
@@ -251,15 +292,16 @@ io.on('connection', (socket) => {
         me.y = SPAWN.y;
       }
       if (r.capture) await prisma.pokemon.create({ data: { user_id: u.id, ...r.capture } });
-      await persist(b);
+      await persist(b, r.drops);
       if (r.result === 'lose') await savePosition(me);
 
-      socket.emit('battle:update', { log: r.log, result: r.result, balls: b.balls, capture: r.capture ? { species_id: r.capture.species_id } : null });
+      socket.emit('battle:update', { log: r.log, result: r.result, balls: b.inv, drops: r.drops || null, capture: r.capture ? { species_id: r.capture.species_id } : null });
       if (r.result) {
         if (r.result === 'win' || r.result === 'caught') defeatWild(b.world);
         else releaseWild(b.world);
         immuneUntil = Date.now() + IMMUNE_MS;
         battle = null;
+        setBusy(false);
         lastTile = '';
         if (r.result === 'lose') {
           socket.emit('player:correct', { x: me.x, y: me.y });
@@ -316,6 +358,7 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', async () => {
     if (battle) releaseWild(battle.world);
+    setBusy(false);
     players.delete(socket.id);
     io.emit('player:left', me.id);
     io.emit('online', players.size);

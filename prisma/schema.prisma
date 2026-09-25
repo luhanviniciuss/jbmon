@@ -14,6 +14,11 @@ model User {
   x             Float     @default(1600)
   y             Float     @default(1600)
   pokeballs     Int       @default(10)
+  greatballs    Int       @default(0)
+  ultraballs    Int       @default(0)
+  masterballs   Int       @default(0)
+  apricorns     Int       @default(0)
+  shards        Int       @default(0)
   created_at    DateTime  @default(now())
   pokemons      Pokemon[]
 }

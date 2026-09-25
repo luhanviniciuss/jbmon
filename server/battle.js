@@ -1,4 +1,5 @@
-const { SPECIES, WILD_TABLE, calcStats } = require('../public/species.js');
+const { SPECIES, RARITY, WILD_TABLE, calcStats, evolveTarget } = require('../public/species.js');
+const { BALLS } = require('../public/items.js');
 
 const MOVES = {
   attack: { name: 'Investida', power: 40, acc: 1 },
@@ -24,6 +25,20 @@ function makeWild(id, level) {
   return { species_id: id, level, hp: st.hp, maxHp: st.hp, attack: st.attack, defense: st.defense };
 }
 
+function rollDrops(rarity) {
+  const apricorns = rand(1, 3);
+  let shards = 0;
+  if (Math.random() < RARITY[rarity].dropShard) shards = { common: 1, uncommon: 1, rare: rand(1, 2), epic: rand(2, 3), legendary: rand(4, 6) }[rarity];
+  return { apricorns, shards };
+}
+
+// Recalcula stats ao subir de nível/evoluir, preservando o HP já perdido
+function applyStats(p) {
+  const st = calcStats(p.species_id, p.level);
+  p.current_hp += st.hp - p.hp;
+  Object.assign(p, { hp: st.hp, attack: st.attack, defense: st.defense });
+}
+
 function damage(level, power, atk, def) {
   const base = Math.floor((((2 * level) / 5 + 2) * power * atk) / def / 50) + 2;
   const crit = Math.random() < 1 / 16;
@@ -39,7 +54,7 @@ function resolveTurn(b, type) {
   const log = [];
   const w = b.wild;
   const wname = SPECIES[w.species_id].name;
-  const push = (msg, fx) => log.push({ msg, wildHp: w.hp, mine: mineView(b.mine), fx });
+  const push = (msg, fx, extra) => log.push({ msg, wildHp: w.hp, mine: mineView(b.mine), fx, ...extra });
   let result = null;
   let capture = null;
   const my = b.mine;
@@ -53,31 +68,44 @@ function resolveTurn(b, type) {
       push(`${nameOf(my)} usou ${mv.name}! (-${dmg})${crit ? ' Acerto crítico!' : ''}`);
     }
     if (w.hp <= 0) {
-      const exp = Math.floor((SPECIES[w.species_id].exp * w.level) / 5);
+      const rarity = SPECIES[w.species_id].rarity;
+      const exp = Math.floor(((SPECIES[w.species_id].exp * w.level) / 5) * RARITY[rarity].expMul);
       my.current_exp += exp;
       push(`${wname} selvagem foi derrotado! ${nameOf(my)} ganhou ${exp} EXP.`);
       while (my.current_exp >= my.level * 20 && my.level < 100) {
         my.current_exp -= my.level * 20;
         my.level++;
-        const st = calcStats(my.species_id, my.level);
-        my.current_hp += st.hp - my.hp;
-        Object.assign(my, { hp: st.hp, attack: st.attack, defense: st.defense });
+        applyStats(my);
         push(`${nameOf(my)} subiu para o nível ${my.level}!`);
+        const to = evolveTarget(my.species_id, my.level);
+        if (to) {
+          const before = nameOf(my);
+          my.species_id = to;
+          applyStats(my);
+          push(`${before} evoluiu para ${SPECIES[to].name}!`, 'evolve');
+        }
       }
-      return { log, result: 'win', capture };
+      const drops = rollDrops(rarity);
+      push(`Coletou ${drops.apricorns} Bolota(s)${drops.shards ? ` e ${drops.shards} Fragmento(s)` : ''}!`);
+      return { log, result: 'win', capture, drops };
     }
-  } else if (type === 'ball') {
-    if (b.balls <= 0) return { log: [{ msg: 'Você não tem Pokébolas!', wildHp: w.hp, mine: mineView(my) }], result: null, capture };
-    b.balls--;
-    push('Você lançou uma Pokébola!', 'ball');
-    const chance = Math.min(0.95, ((3 * w.maxHp - 2 * w.hp) / (3 * w.maxHp)) * SPECIES[w.species_id].catch * 1.5);
+  } else if (type.startsWith('ball:')) {
+    const kind = type.slice(5);
+    const ball = BALLS[kind];
+    if (!ball || !(b.inv[kind] > 0)) return { log: [{ msg: 'Você não tem essa Pokébola!', wildHp: w.hp, mine: mineView(my) }], result: null, capture };
+    b.inv[kind]--;
+    push(`Você lançou uma ${ball.name}!`, 'ball', { kind });
+    const hpFactor = (3 * w.maxHp - 2 * w.hp) / (3 * w.maxHp);
+    const chance = ball.guaranteed ? 1 : Math.min(0.95, hpFactor * SPECIES[w.species_id].catch * 1.5 * ball.mult);
     if (Math.random() < chance) {
       push(`Gotcha! ${wname} foi capturado!`, 'caught');
       const st = calcStats(w.species_id, w.level);
       capture = { species_id: w.species_id, level: w.level, hp: st.hp, attack: st.attack, defense: st.defense, current_hp: Math.max(1, w.hp) };
-      return { log, result: 'caught', capture };
+      const drops = rollDrops(SPECIES[w.species_id].rarity);
+      push(`Coletou ${drops.apricorns} Bolota(s)${drops.shards ? ` e ${drops.shards} Fragmento(s)` : ''}!`);
+      return { log, result: 'caught', capture, drops };
     }
-    push(`Ah não! ${wname} escapou da Pokébola!`, 'escape');
+    push(`Ah não! ${wname} escapou da ${ball.name}!`, 'escape');
   } else if (type === 'run') {
     if (Math.random() < 0.7) {
       push('Você fugiu com segurança!');

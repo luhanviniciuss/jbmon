@@ -31,6 +31,7 @@ model Pokemon {
   level       Int      @default(5)
   hp          Int      @default(20)
   current_hp  Int      @default(20)
+  slot        Int? // posição na equipe (1 a 6); null = no box
   attack      Int      @default(10)
   defense     Int      @default(10)
   current_exp Int      @default(0)

@@ -9,9 +9,10 @@ const { PrismaClient } = require('@prisma/client');
 const { MAP_W, TILE, PLAYER_SPEED, CLEAR_MIN, CLEAR_MAX, generateMap } = require('../public/map.js');
 const { SPECIES, WILD_TABLE, WATER_TABLE, calcStats, minLevel } = require('../public/species.js');
 const { BALLS, RECIPES } = require('../public/items.js');
-const { pickSpecies, makeWild, resolveTurn, mineView, wildView } = require('./battle.js');
+const { pickSpecies, makeWild, resolveTurn, mineView, wildView, teamView } = require('./battle.js');
 const createRaidSystem = require('./raid.js');
 const { retry, durable, flushPending, pendingCount } = require('./durable.js');
+const { loadTeam, nextFreeSlot, partyOf } = require('./team.js');
 const { startBackups } = require('./backup.js');
 
 const PORT = process.env.PORT || 3000;
@@ -154,7 +155,7 @@ app.post('/api/register', async (req, res) => {
       data: {
         username,
         password_hash: await bcrypt.hash(password, 10),
-        pokemons: { create: { species_id: sid, level: 5, hp: st.hp, attack: st.attack, defense: st.defense, current_hp: st.hp } },
+        pokemons: { create: { species_id: sid, level: 5, hp: st.hp, attack: st.attack, defense: st.defense, current_hp: st.hp, slot: 1 } },
       },
     });
     res.json({ token: signToken(user), username: user.username });
@@ -175,11 +176,25 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.get('/api/party', auth, async (req, res) => {
-  const [pokemons, user] = await Promise.all([
-    prisma.pokemon.findMany({ where: { user_id: req.user.id }, orderBy: { id: 'asc' } }),
-    prisma.user.findUnique({ where: { id: req.user.id } }),
-  ]);
-  res.json({ party: pokemons.slice(0, 6), box: pokemons.slice(6), balls: invOf(user) });
+  const [{ party, box }, user] = await Promise.all([partyOf(prisma, req.user.id), prisma.user.findUnique({ where: { id: req.user.id } })]);
+  res.json({ party, box, balls: invOf(user) });
+});
+
+// Define a equipe: lista ordenada de 1 a 6 ids de Pokémon do jogador; quem não estiver na lista vai para o box.
+app.post('/api/party/set', auth, async (req, res) => {
+  const ids = req.body?.team;
+  if (!Array.isArray(ids) || ids.length < 1 || ids.length > 6 || ids.some((n) => !Number.isInteger(n)) || new Set(ids).size !== ids.length) {
+    return res.status(400).json({ error: 'A equipe precisa ter de 1 a 6 Pokémon diferentes' });
+  }
+  if (battlingUsers.has(req.user.id)) return res.status(409).json({ error: 'Não dá para mudar a equipe durante uma batalha' });
+  const owned = await prisma.pokemon.count({ where: { user_id: req.user.id, id: { in: ids } } });
+  if (owned !== ids.length) return res.status(400).json({ error: 'Pokémon inválido' });
+  await retry(() => prisma.$transaction([
+    prisma.pokemon.updateMany({ where: { user_id: req.user.id }, data: { slot: null } }),
+    ...ids.map((id, i) => prisma.pokemon.update({ where: { id }, data: { slot: i + 1 } })),
+  ]));
+  const { party, box } = await partyOf(prisma, req.user.id);
+  res.json({ party, box });
 });
 
 app.get('/api/inventory', auth, async (req, res) => {
@@ -279,8 +294,9 @@ io.on('connection', (socket) => {
   let immuneUntil = 0;
   let lastHeal = 0;
 
-  const persist = (b, drops, capture) =>
-    prisma.$transaction([
+  const persist = async (b, drops, capture) => {
+    const slot = capture ? await nextFreeSlot(prisma, u.id) : null; // vaga na equipe ou box
+    return prisma.$transaction([
       ...b.team.map((p) =>
         prisma.pokemon.update({
           where: { id: p.id },
@@ -294,8 +310,9 @@ io.on('connection', (socket) => {
           ...(drops ? { apricorns: { increment: drops.apricorns }, shards: { increment: drops.shards } } : {}),
         },
       }),
-      ...(capture ? [prisma.pokemon.create({ data: { user_id: u.id, ...capture } })] : []),
+      ...(capture ? [prisma.pokemon.create({ data: { user_id: u.id, ...capture, slot } })] : []),
     ]);
+  };
 
   async function startBattle(w) {
     starting = true;
@@ -303,12 +320,12 @@ io.on('connection', (socket) => {
     w.busy = true;
     io.emit('wild:remove', w.id);
     try {
-      const team = await prisma.pokemon.findMany({ where: { user_id: u.id }, orderBy: { id: 'asc' }, take: 6 });
+      const team = await loadTeam(prisma, u.id);
       const mine = team.find((p) => p.current_hp > 0);
       const fresh = await prisma.user.findUnique({ where: { id: u.id } });
       if (!mine || socket.disconnected) return releaseWild(w);
       battle = { team, mine, world: w, wild: makeWild(w.species_id, w.level), inv: invOf(fresh) };
-      socket.emit('battle:start', { wild: wildView(battle.wild), mine: mineView(mine), balls: battle.inv });
+      socket.emit('battle:start', { wild: wildView(battle.wild), mine: mineView(mine), balls: battle.inv, team: team.map(mineView) });
     } catch (err) {
       console.error('Falha ao iniciar batalha', err.message);
       releaseWild(w);
@@ -339,7 +356,7 @@ io.on('connection', (socket) => {
   }
 
   socket.on('battle:action', async (type) => {
-    if (!battle || acting || !ACTIONS.includes(type)) return;
+    if (!battle || acting || !(ACTIONS.includes(type) || /^switch:\d+$/.test(type))) return;
     acting = true;
     try {
       const b = battle;
@@ -354,7 +371,7 @@ io.on('connection', (socket) => {
       await durable('batalha', () => persist(b, r.drops, r.capture));
       if (r.result === 'lose') await savePosition(me, true);
 
-      socket.emit('battle:update', { log: r.log, result: r.result, balls: b.inv, drops: r.drops || null, capture: r.capture ? { species_id: r.capture.species_id } : null });
+      socket.emit('battle:update', { log: r.log, result: r.result, team: teamView(b), forceSwitch: !!b.forceSwitch, balls: b.inv, drops: r.drops || null, capture: r.capture ? { species_id: r.capture.species_id } : null });
       if (r.result) {
         if (r.result === 'win' || r.result === 'caught') defeatWild(b.world);
         else releaseWild(b.world);

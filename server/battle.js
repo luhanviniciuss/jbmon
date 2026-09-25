@@ -13,6 +13,7 @@ const mineView = (p) => ({
   id: p.id, species_id: p.species_id, nickname: p.nickname, level: p.level,
   hp: p.current_hp, maxHp: p.hp, exp: p.current_exp, expMax: expToNext(p.level),
 });
+const teamView = (b) => b.team.map(mineView);
 const wildView = (w) => ({ species_id: w.species_id, level: w.level, hp: w.hp, maxHp: w.maxHp });
 const nameOf = (p) => p.nickname || SPECIES[p.species_id].name;
 
@@ -133,8 +134,27 @@ function resolveTurn(b, type) {
   b.participants.add(b.mine.id);
   let result = null;
   let capture = null;
-  const my = b.mine;
-  const myTypes = SPECIES[my.species_id].types;
+  let my = b.mine;
+  let myTypes = SPECIES[my.species_id].types;
+
+  // Trocar de Pokémon. Voluntário = gasta o turno (o selvagem ataca quem entra); depois de um desmaio = grátis.
+  if (b.forceSwitch && !type.startsWith('switch:')) {
+    return { log: [{ msg: 'Escolha o próximo Pokémon!', wildHp: w.hp, mine: mineView(my) }], result: null, capture };
+  }
+  if (type.startsWith('switch:')) {
+    const target = b.team.find((p) => p.id === Number(type.slice(7)));
+    if (!target || target.current_hp <= 0 || target === b.mine) {
+      return { log: [{ msg: 'Não dá para trocar para esse Pokémon.', wildHp: w.hp, mine: mineView(my) }], result: null, capture };
+    }
+    const forced = !!b.forceSwitch;
+    b.forceSwitch = false;
+    if (!forced) push(`Volte, ${nameOf(my)}!`);
+    b.mine = my = target;
+    myTypes = SPECIES[my.species_id].types;
+    b.participants.add(target.id);
+    push(`Vai, ${nameOf(target)}!`, 'switch');
+    if (forced) return { log, result: null, capture };
+  }
 
   // Toda batalha rende EXP. Vitória/captura: equipe inteira (quem lutou = cheio, os demais = compartilhado).
   // Derrota/fuga: só quem lutou, e menos, proporcional ao estrago que causou no inimigo.
@@ -213,11 +233,14 @@ function resolveTurn(b, type) {
   }
   if (my.current_hp <= 0) {
     push(`${nameOf(my)} desmaiou!`);
-    const next = b.team.find((p) => p.current_hp > 0);
-    if (next) {
-      b.mine = next;
-      b.participants.add(next.id);
-      push(`Vai, ${nameOf(next)}!`);
+    const alive = b.team.filter((p) => p.current_hp > 0);
+    if (alive.length === 1) { // só resta um: entra sozinho
+      b.mine = alive[0];
+      b.participants.add(alive[0].id);
+      push(`Vai, ${nameOf(alive[0])}!`, 'switch');
+    } else if (alive.length > 1) { // você escolhe quem entra (sem custo de turno)
+      b.forceSwitch = true;
+      push('Escolha o próximo Pokémon!');
     } else {
       push('Você não tem mais Pokémon! Levado ao Centro Pokémon…');
       giveExp('lose'); // perder também ensina: quem lutou ganha um pouco de EXP
@@ -229,5 +252,5 @@ function resolveTurn(b, type) {
 
 module.exports = {
   rand, pickSpecies, makeWild, resolveTurn, mineView, wildView, nameOf,
-  getMove, calcHit, effText, catchChance, rollDrops, gainExp, awardExp, expValue, XP_RATE, SHARE,
+  teamView, getMove, calcHit, effText, catchChance, rollDrops, gainExp, awardExp, expValue, XP_RATE, SHARE,
 };

@@ -72,6 +72,48 @@ const monCard = (p, i) => `<div class="mon${p.current_hp <= 0 ? ' fainted' : ''}
   <div class="tags"><span class="rar" style="--rc:${rarityOf(p.species_id).color}">${rarityOf(p.species_id).label}</span>${typeChips(p.species_id)}</div>
   ${statRow('hp', 'HP', p.current_hp, p.hp, p.current_hp + '/' + p.hp)}${statRow('atk', 'ATK', p.attack, 60)}${statRow('def', 'DEF', p.defense, 60)}${statRow('xp', 'EXP', p.current_exp, expToNext(p.level), p.current_exp + '/' + expToNext(p.level))}</div></div>`;
 
+// ---------- Equipe (até 6) e Box ----------
+let PARTY = { party: [], box: [] };
+let swapId = null; // Pokémon do box escolhido para entrar quando a equipe está cheia
+
+async function saveTeam(ids) {
+  try {
+    const r = await fetch('/api/party/set', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ team: ids }) });
+    const body = await r.json();
+    if (!r.ok) return toast(body.error || 'Não foi possível mudar a equipe');
+    PARTY = body;
+  } catch { toast('Erro de conexão'); }
+  swapId = null;
+  renderParty();
+}
+
+function renderParty() {
+  const { party, box } = PARTY;
+  const ids = party.map((p) => p.id);
+  const withControls = (p, i, controls, slot) => monCard(p, i).replace(/<\/div>$/, (slot ? '<span class="slotnum">#' + slot + '</span>' : '') + '<div class="mon-actions">' + controls + '</div></div>');
+  const btn = (act, id, label, cls = '', dis = false) => '<button data-act="' + act + '" data-id="' + id + '" class="' + cls + '"' + (dis ? ' disabled' : '') + '>' + label + '</button>';
+  const teamHtml = party.map((p, i) => withControls(p, i,
+    swapId ? btn('replace', p.id, 'Substituir este', 'warn')
+      : btn('up', p.id, '▲', '', i === 0) + btn('down', p.id, '▼', '', i === party.length - 1) + btn('box', p.id, 'Enviar ao box', '', party.length <= 1),
+    i + 1)).join('');
+  const boxHtml = box.map((p, i) => withControls(p, i, btn('add', p.id, party.length < 6 ? 'Colocar na equipe' : 'Trocar com alguém…', 'primary', swapId === p.id))).join('');
+  $('partyList').innerHTML =
+    '<p class="party-hint">O 1º Pokémon da equipe entra primeiro em batalha. Use ▲▼ para reordenar. Só mudam fora de batalha.</p>' +
+    (swapId ? '<div class="swap-banner"><span>Escolha quem sai da equipe</span><button class="btn small ghost" id="swapCancel">Cancelar</button></div>' : '') +
+    '<div class="section-title">Equipe · ' + party.length + '/6</div>' + (teamHtml || '<p class="empty">Equipe vazia.</p>') +
+    '<div class="section-title">Box · ' + box.length + '</div>' + (boxHtml || '<p class="empty">Nenhum Pokémon no box (os capturados com a equipe cheia vêm para cá).</p>');
+  $('partyList').querySelectorAll('.mon-actions button').forEach((b) => b.addEventListener('click', () => {
+    const id = Number(b.dataset.id), i = ids.indexOf(id);
+    if (b.dataset.act === 'up' && i > 0) { const a = ids.slice(); [a[i - 1], a[i]] = [a[i], a[i - 1]]; saveTeam(a); }
+    else if (b.dataset.act === 'down' && i < ids.length - 1) { const a = ids.slice(); [a[i + 1], a[i]] = [a[i], a[i + 1]]; saveTeam(a); }
+    else if (b.dataset.act === 'box') saveTeam(ids.filter((x) => x !== id));
+    else if (b.dataset.act === 'add') { if (ids.length < 6) saveTeam([...ids, id]); else { swapId = id; renderParty(); } }
+    else if (b.dataset.act === 'replace') saveTeam(ids.map((x) => (x === id ? swapId : x)));
+  }));
+  $('swapCancel')?.addEventListener('click', () => { swapId = null; renderParty(); });
+  requestAnimationFrame(() => $('partyList').querySelectorAll('.bar i').forEach((i) => (i.style.width = i.style.getPropertyValue('--w'))));
+}
+
 async function openParty(open = !$('drawer').classList.contains('open')) {
   if (open) { $('bag').classList.remove('open'); $('group').classList.remove('open'); }
   const drawer = $('drawer');
@@ -83,9 +125,9 @@ async function openParty(open = !$('drawer').classList.contains('open')) {
     const res = await fetch('/api/party', { headers: { Authorization: `Bearer ${token}` } });
     const { party, box, balls } = await res.json();
     setBalls(balls);
-    $('partyList').innerHTML = (party.length ? party.map(monCard).join('') : '<p class="empty">Nenhum Pokémon ainda.</p>')
-      + (box.length ? `<div class="section-title">Box · ${box.length}</div>${box.map(monCard).join('')}` : '');
-    requestAnimationFrame(() => $('partyList').querySelectorAll('.bar i').forEach((i) => (i.style.width = i.style.getPropertyValue('--w'))));
+    PARTY = { party, box };
+    swapId = null;
+    renderParty();
   } catch {
     $('partyList').innerHTML = '<p class="empty">Erro ao carregar a party.</p>';
   }

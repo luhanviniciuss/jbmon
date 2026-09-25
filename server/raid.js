@@ -5,6 +5,7 @@
 const { SPECIES, RARITY, BOSS_TABLE, calcStats, effectiveness } = require('../public/species.js');
 const { BALLS } = require('../public/items.js');
 const { durable } = require('./durable.js');
+const { loadTeam, nextFreeSlot } = require('./team.js');
 const { rand, pickSpecies, mineView, nameOf, getMove, calcHit, effText, catchChance, awardExp, XP_RATE } = require('./battle.js');
 
 const envNum = (k, d) => (process.env[k] !== undefined && process.env[k] !== '' ? Number(process.env[k]) : d);
@@ -173,7 +174,7 @@ module.exports = function createRaidSystem(ctx) {
     try {
       const members = [];
       for (const id of near) {
-        const team = await prisma.pokemon.findMany({ where: { user_id: id }, orderBy: { id: 'asc' }, take: 6 });
+        const team = await loadTeam(prisma, id);
         const mine = team.find((p) => p.current_hp > 0);
         const user = await prisma.user.findUnique({ where: { id } });
         if (!mine || !meByUser.get(id)) { setBusy(id, false); continue; }
@@ -349,7 +350,9 @@ module.exports = function createRaidSystem(ctx) {
     const drops = m.drops;
     const inv = { ...m.inv };
     const team = m.team.map((p) => ({ id: p.id, species_id: p.species_id, level: p.level, hp: p.hp, attack: p.attack, defense: p.defense, current_exp: p.current_exp, current_hp: p.current_hp }));
-    await durable('raid', () => prisma.$transaction([
+    await durable('raid', async () => {
+      const slot = withCapture ? await nextFreeSlot(prisma, m.uid) : null; // vaga na equipe ou box
+      return prisma.$transaction([
       ...team.map(({ id, ...data }) => prisma.pokemon.update({ where: { id }, data })),
       prisma.user.update({
         where: { id: m.uid },
@@ -358,8 +361,9 @@ module.exports = function createRaidSystem(ctx) {
           ...(withDrops ? { apricorns: { increment: drops.apricorns }, shards: { increment: drops.shards } } : {}),
         },
       }),
-      ...(withCapture ? [prisma.pokemon.create({ data: { user_id: m.uid, species_id: r.boss.species_id, level: r.level, hp: r.stats.hp, attack: r.stats.attack, defense: r.stats.defense, current_hp: r.stats.hp } })] : []),
-    ]));
+      ...(withCapture ? [prisma.pokemon.create({ data: { user_id: m.uid, species_id: r.boss.species_id, level: r.level, hp: r.stats.hp, attack: r.stats.attack, defense: r.stats.defense, current_hp: r.stats.hp, slot } })] : []),
+      ]);
+    });
   }
 
   async function finish(r, result, log) {

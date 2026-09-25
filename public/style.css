@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --bg: #0b1020; --panel: rgba(20, 26, 48, .72); --line: rgba(255, 255, 255, .12);
   --text: #eef1ff; --muted: #9aa3c7; --red: #ff4d5e; --red2: #ff7a59; --blue: #4da3ff; --green: #3ddc97; --gold: #ffcf5c;
   --r: 16px; --safe-t: env(safe-area-inset-top, 0px); --safe-b: env(safe-area-inset-bottom, 0px);
@@ -13,7 +13,7 @@ kbd { font: 600 11px inherit; padding: 2px 6px; border-radius: 6px; background: 
 
 .glass { background: var(--panel); border: 1px solid var(--line); backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%); box-shadow: 0 8px 30px rgba(0,0,0,.35); }
 
-/* ---------- Pokébola ---------- */
+/* ---------- PokÃ©bola ---------- */
 .ball { display: inline-block; width: 44px; height: 44px; border-radius: 50%; position: relative; flex: none;
   background: linear-gradient(#ff4d5e 0 46%, #1b1f33 46% 54%, #f4f6ff 54%); border: 3px solid #1b1f33; box-shadow: 0 4px 14px rgba(255,77,94,.5); }
 .ball::after { content: ""; position: absolute; left: 50%; top: 50%; width: 30%; height: 30%; transform: translate(-50%, -50%);
@@ -171,7 +171,7 @@ h1 span { background: linear-gradient(90deg, var(--red), var(--gold)); -webkit-b
 .a1 { background: linear-gradient(135deg, #ff4d5e, #ff7a59); } .a2 { background: linear-gradient(135deg, #ff9f43, #ffcf5c); color: #2b1d00; }
 .a3 { background: linear-gradient(135deg, #3d8bff, #6fb4ff); } .a4 { background: linear-gradient(135deg, #4a5480, #6b76a8); }
 
-/* Centro Pokémon (rótulo no mapa é desenhado pelo Phaser) */
+/* Centro PokÃ©mon (rÃ³tulo no mapa Ã© desenhado pelo Phaser) */
 @media (max-width: 640px) { .b-card { width: 56vw; padding: 8px 10px; } .foe-sprite { right: 6%; } .act { padding: 12px 6px; font-size: 14px; } }
 @media (max-height: 520px) { .b-actions { grid-template-columns: repeat(4, 1fr); } #bMsg { min-height: 0; font-size: 14px; } .b-panel { gap: 8px; } }
 
@@ -248,3 +248,37 @@ h1 span { background: linear-gradient(90deg, var(--red), var(--gold)); -webkit-b
 .turninfo { font-weight: 800; font-size: 13px; letter-spacing: .04em; padding: 6px 12px; border-radius: 999px; background: rgba(255,255,255,.1); align-self: flex-start; }
 .turninfo.mine { background: linear-gradient(135deg, #f0b400, #ff7a59); color: #2b1d00; animation: bossPulse 1.2s infinite; }
 @media (max-width: 640px) { .raidbar { top: calc(118px + var(--safe-t)); width: 40vw; } }
+
+/* ---------- Trocar de PokÃ©mon e montar a equipe ---------- */
+.act.a5 { background: linear-gradient(135deg, #7c5cff, #a78bfa); }
+.switchpicker { display: flex; flex-direction: column; gap: 8px; }
+.sw-title { font-weight: 800; font-size: 14px; }
+.sw-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-height: 38vh; overflow-y: auto; }
+.sw-item { position: relative; display: grid; grid-template-columns: 44px 1fr; gap: 8px; align-items: center; text-align: left; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,.08); color: var(--text); cursor: pointer; font: 600 13px inherit; }
+.sw-item:hover:not(:disabled) { background: rgba(255,255,255,.16); transform: translateY(-1px); }
+.sw-item:disabled { opacity: .4; cursor: not-allowed; }
+.sw-item.active { border-color: var(--gold); }
+.sw-item img { width: 44px; height: 44px; image-rendering: pixelated; }
+.sw-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sw-info b { text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sw-info small { color: var(--muted); font-size: 11px; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.sw-info .tchip { font-size: 8px; padding: 1px 6px; }
+.sw-info i { display: block; height: 5px; border-radius: 5px; background: rgba(255,255,255,.14); overflow: hidden; }
+.sw-info u { display: block; height: 100%; background: var(--green); text-decoration: none; }
+.sw-item em { position: absolute; right: 8px; top: 6px; font-style: normal; font-size: 10px; color: var(--muted); }
+.sw-item kbd { position: absolute; right: 8px; bottom: 6px; font-size: 9px; }
+@media (max-width: 640px) { .sw-list { grid-template-columns: 1fr; max-height: 30vh; } }
+
+.party-hint { font-size: 12px; color: var(--muted); margin: 0 2px 4px; line-height: 1.4; }
+.swap-banner { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-radius: 12px; background: rgba(255,207,92,.16); border: 1px solid var(--gold); font-size: 13px; }
+.mon-actions { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+.mon-actions button { flex: 1; min-width: 64px; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.08); color: var(--text); cursor: pointer; font: 700 12px inherit; }
+.mon-actions button:hover:not(:disabled) { background: rgba(255,255,255,.18); }
+.mon-actions button:disabled { opacity: .35; cursor: not-allowed; }
+.mon-actions button.primary { background: linear-gradient(135deg, #3d8bff, #6fb4ff); border: 0; }
+.mon-actions button.warn { background: linear-gradient(135deg, #ff9f43, #ffcf5c); color: #2b1d00; border: 0; }
+.mon .slotnum { position: absolute; top: 8px; right: 10px; font-size: 11px; font-weight: 800; color: var(--muted); }
+.mon { position: relative; }
+
+.list { overflow-x: hidden; }
+

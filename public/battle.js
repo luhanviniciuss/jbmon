@@ -15,7 +15,10 @@ const Battle = (() => {
   let queue = Promise.resolve(); // atualizações da raid chegam em sequência e são animadas uma a uma
   const st = { foeMax: 1, mineId: null, mineSp: null, foeSp: null };
 
+  let team = []; // equipe atual (vinda do servidor a cada turno)
   const pickerOpen = () => !$('ballPicker').hidden;
+  const switchOpen = () => !$('switchPicker').hidden;
+  const canSwitch = () => team.some((p) => p.hp > 0 && p.id !== st.mineId);
 
   function setBar(id, hp, max) {
     const pct = Math.max(0, Math.min(100, (hp / max) * 100));
@@ -78,14 +81,32 @@ const Battle = (() => {
 
   function lock(v) {
     locked = v;
-    document.querySelectorAll('#bActions .act').forEach((b) => (b.disabled = v || (b.dataset.act === 'ballmenu' && invTotal(inv) <= 0)));
+    document.querySelectorAll('#bActions .act').forEach((b) => (b.disabled = v || (b.dataset.act === 'ballmenu' && invTotal(inv) <= 0) || (b.dataset.act === 'switch' && !canSwitch())));
     $('ballBack').disabled = v;
     refreshBalls();
   }
 
-  function showPicker(open) {
-    $('ballPicker').hidden = !open;
-    $('bActions').hidden = open;
+  // Painéis do rodapé: ações, seletor de Pokébolas e seletor de troca (só um aparece por vez)
+  function showPanel(which) {
+    $('bActions').hidden = which !== 'actions';
+    $('ballPicker').hidden = which !== 'balls';
+    $('switchPicker').hidden = which !== 'switch';
+  }
+  const showPicker = (open) => showPanel(open ? 'balls' : 'actions');
+
+  function openSwitch(forced = false) {
+    $('swTitle').textContent = forced ? 'Escolha o próximo Pokémon!' : 'Trocar de Pokémon (gasta o turno)';
+    $('swBack').hidden = forced;
+    $('swList').innerHTML = team.map((p, i) => {
+      const off = p.hp <= 0 || p.id === st.mineId;
+      const pct = Math.max(0, Math.round((p.hp / p.maxHp) * 100));
+      return '<button class="sw-item' + (p.id === st.mineId ? ' active' : '') + '" data-id="' + p.id + '"' + (off ? ' disabled' : '') + '>' +
+        '<img src="' + spriteUrl(p.species_id) + '" alt="" />' +
+        '<span class="sw-info"><b>' + (p.nickname || speciesName(p.species_id)) + '</b><small>Lv. ' + p.level + ' ' + typeChips(p.species_id) + '</small><i><u style="width:' + pct + '%"></u></i></span>' +
+        '<em>' + (p.hp <= 0 ? 'Desmaiou' : p.hp + '/' + p.maxHp) + '</em><kbd>' + (i + 1) + '</kbd></button>';
+    }).join('');
+    $('swList').querySelectorAll('.sw-item').forEach((b) => b.addEventListener('click', () => act('switch:' + b.dataset.id)));
+    showPanel('switch');
   }
 
   function hit(el) { el.classList.remove('hit'); void el.offsetWidth; el.classList.add('hit'); }
@@ -101,6 +122,7 @@ const Battle = (() => {
     $('turnInfo').hidden = true;
     $('ballBack').hidden = false;
     document.querySelector('#bActions [data-act=run]').firstChild.textContent = m === 'raid' ? 'Sair' : 'Fugir';
+    document.querySelector('#bActions [data-act=switch]').hidden = m === 'raid'; // na raid a troca é automática
     showPicker(false);
     $('bContinue').hidden = true;
     return foe;
@@ -109,6 +131,7 @@ const Battle = (() => {
   // ---------- Batalha 1 contra 1 ----------
   function start(d) {
     inv = d.balls;
+    team = d.team || [];
     const foe = resetField('wild');
     foe.src = spriteUrl(d.wild.species_id);
     setFoe(d.wild);
@@ -161,12 +184,16 @@ const Battle = (() => {
     inv = d.balls;
     refreshBalls();
     await playLog(d.log, 'wildHp', (e) => e.mine);
+    team = d.team || team;
     showPicker(false);
     if (d.result) {
       $('bActions').hidden = true;
       $('bContinue').hidden = false;
       $('bContinue').focus();
       $('bContinue')._result = d;
+    } else if (d.forceSwitch) { // o Pokémon da vez desmaiou: escolha quem entra (sem gastar o turno)
+      lock(false);
+      openSwitch(true);
     } else lock(false);
   }
 
@@ -270,6 +297,7 @@ const Battle = (() => {
   function act(type) {
     if (!active || locked) return;
     if (type === 'ballmenu') return invTotal(inv) > 0 && showPicker(true);
+    if (type === 'switch') return canSwitch() && openSwitch(false);
     lock(true);
     showPicker(false);
     socket.emit(mode === 'raid' ? 'raid:action' : 'battle:action', type);
@@ -285,16 +313,22 @@ const Battle = (() => {
   document.querySelectorAll('#bActions .act').forEach((b) => b.addEventListener('click', () => act(b.dataset.act)));
   document.querySelectorAll('[data-ball]').forEach((b) => b.addEventListener('click', () => act('ball:' + b.dataset.ball)));
   $('ballBack').addEventListener('click', () => showPicker(false));
+  $('swBack').addEventListener('click', () => showPanel('actions'));
   $('bContinue').addEventListener('click', close);
   window.addEventListener('keydown', (e) => {
     if (!active) return;
     if (!$('bContinue').hidden) { if (e.key === 'Enter' || e.key === ' ') close(); return; }
+    if (switchOpen()) { // teclas 1-6 escolhem o Pokémon; Esc volta (exceto quando a escolha é obrigatória)
+      if ((e.key === 'Escape' || e.key === 'Backspace') && !$('swBack').hidden) showPanel('actions');
+      else if (/^[1-6]$/.test(e.key)) { const p = team[e.key - 1]; if (p && p.hp > 0 && p.id !== st.mineId) act('switch:' + p.id); }
+      return;
+    }
     if (pickerOpen()) {
       if ((e.key === 'Escape' || e.key === 'Backspace') && !$('ballBack').hidden) showPicker(false);
       else if (KINDS[e.key - 1]) act('ball:' + KINDS[e.key - 1]);
       return;
     }
-    const map = { 1: 'attack', 2: 'strong', 3: 'ballmenu', 4: 'run' };
+    const map = { 1: 'attack', 2: 'strong', 3: 'ballmenu', 4: 'switch', 5: 'run' };
     if (map[e.key]) act(map[e.key]);
   });
 

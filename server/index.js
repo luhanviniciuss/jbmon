@@ -12,6 +12,8 @@ const { BALLS, RECIPES } = require('../public/items.js');
 const { pickSpecies, makeWild, resolveTurn, mineView, wildView, teamView } = require('./battle.js');
 const createRaidSystem = require('./raid.js');
 const createChat = require('./chat.js');
+const createModeration = require('./moderation.js');
+const registerAdmin = require('./admin.js');
 const { retry, durable, flushPending, pendingCount } = require('./durable.js');
 const { loadTeam, nextFreeSlot, partyOf } = require('./team.js');
 const { startBackups } = require('./backup.js');
@@ -45,6 +47,9 @@ const LEVEL_BONUS = { common: 0, uncommon: 1, rare: 2, epic: 4, legendary: 0 };
 const HEAL_BALLS = 10; // o Centro Pokémon repõe até esta quantidade
 
 const prisma = new PrismaClient();
+const moderation = createModeration(prisma);
+// Nomes que jogadores comuns não podem registrar (evita se passar por administração no chat)
+const RESERVED_NAMES = /^(admin|administrador|administrator|adm|moderador|moderator|mod|gm|staff|system|sistema|root|suporte|support)$/i;
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
@@ -95,15 +100,52 @@ if (grassTiles.length) for (let i = 0; i < WILD_COUNT; i++) spawnWild();
 if (shoreWater.length) for (let i = 0; i < WATER_COUNT; i++) spawnWild(true);
 console.log(`${wilds.size} Pokémon selvagens (${grassTiles.length} tiles de grama alta)`);
 
+// Spawn manual (painel admin): coloca `count` Pokémon da espécie/nível pedidos ao redor do ponto (tx, ty)
+function spawnAdminWild({ species_id, level, count, tx, ty, water, ttlMs }) {
+  const made = [];
+  const taken = new Set();
+  const spot = () => {
+    for (let r = 0; r <= 12; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          const x = tx + dx, y = ty + dy, t = MAP[y]?.[x];
+          if (t === undefined || taken.has(x + ',' + y)) continue;
+          if (water ? t === 2 : t !== 2 && t !== 3) return [x, y];
+        }
+      }
+      if (r === 12) return null;
+    }
+    return null;
+  };
+  for (let i = 0; i < count; i++) {
+    const p = spot();
+    if (!p) break;
+    taken.add(p[0] + ',' + p[1]);
+    const w = { id: nextWildId++, species_id, level, water, tx: p[0], ty: p[1], homeX: p[0], homeY: p[1], x: p[0] * TILE + TILE / 2, y: p[1] * TILE + TILE / 2, busy: false, admin: true, expiresAt: Date.now() + ttlMs };
+    wilds.set(w.id, w);
+    io.emit('wild:add', wildPublic(w));
+    made.push(w);
+  }
+  return made;
+}
+function clearAdminWilds() {
+  let n = 0;
+  for (const w of [...wilds.values()]) if (w.admin && !w.busy) { wilds.delete(w.id); io.emit('wild:remove', w.id); n++; }
+  return n;
+}
+
 const releaseWild = (w) => { w.busy = false; io.emit('wild:add', wildPublic(w)); }; // fugiu/perdeu: volta ao mapa
-const defeatWild = (w) => { // venceu/capturou: some e um novo nasce depois
+const defeatWild = (w) => { // venceu/capturou: some e um novo nasce depois (os spawnados por admin não têm substituto)
   wilds.delete(w.id);
+  if (w.admin) return;
   setTimeout(() => io.emit('wild:add', wildPublic(spawnWild(!!w.water))), RESPAWN_MS);
 };
 
 setInterval(() => { // vagueiam perto de casa
   const moved = [];
   for (const w of wilds.values()) {
+    if (w.expiresAt && Date.now() > w.expiresAt && !w.busy) { wilds.delete(w.id); io.emit('wild:remove', w.id); continue; } // spawn de admin expirou
     if (w.busy || Math.random() > 0.35) continue;
     const [dx, dy] = [[1, 0], [-1, 0], [0, 1], [0, -1]][rand(0, 3)];
     const nx = w.tx + dx, ny = w.ty + dy, t = MAP[ny]?.[nx];
@@ -139,6 +181,8 @@ function auth(req, res, next) {
   const token = (req.headers.authorization || '').replace('Bearer ', '');
   try {
     req.user = jwt.verify(token, JWT_SECRET);
+    const ban = moderation.banOf(req.user.id);
+    if (ban) return res.status(403).json({ error: 'Conta banida ' + moderation.describe(ban) });
     next();
   } catch {
     res.status(401).json({ error: 'Token inválido' });
@@ -151,6 +195,7 @@ app.post('/api/register', async (req, res) => {
     return res.status(400).json({ error: 'Usuário: 3 a 16 letras, números ou _. Senha: mínimo 4 caracteres' });
   }
   try {
+    if (RESERVED_NAMES.test(username)) return res.status(400).json({ error: 'Esse nome é reservado. Escolha outro.' });
     const sid = STARTERS[Math.floor(Math.random() * STARTERS.length)];
     const st = calcStats(sid, 5);
     const user = await prisma.user.create({
@@ -174,7 +219,9 @@ app.post('/api/login', async (req, res) => {
   if (!user || !(await bcrypt.compare(String(password || ''), user.password_hash))) {
     return res.status(401).json({ error: 'Credenciais inválidas' });
   }
-  res.json({ token: signToken(user), username: user.username });
+  const ban = moderation.banOf(user.id);
+  if (ban) return res.status(403).json({ error: 'Conta banida ' + moderation.describe(ban) });
+  res.json({ token: signToken(user), username: user.username, role: user.role });
 });
 
 app.get('/api/party', auth, async (req, res) => {
@@ -244,16 +291,18 @@ function markCombat(uid, kind) {
   io.emit('player:combat', { id: uid, combat: next });
 }
 const meByUser = new Map(); // uid -> { id, username, x, y }
-function teleportHome(uid) {
+function teleportTo(uid, x, y) {
   const me = meByUser.get(uid);
-  if (!me) return;
-  me.x = SPAWN.x;
-  me.y = SPAWN.y;
+  if (!me) return false;
+  me.x = x;
+  me.y = y;
   const sock = socketByUser.get(uid);
-  sock?.emit('player:correct', { x: me.x, y: me.y });
-  sock?.broadcast.emit('player:moved', { id: me.id, x: me.x, y: me.y, dir: me.dir });
-  savePosition(me);
+  sock?.emit('player:correct', { x, y });
+  sock?.broadcast.emit('player:moved', { id: me.id, x, y, dir: me.dir });
+  savePosition(me, true);
+  return true;
 }
+const teleportHome = (uid) => teleportTo(uid, SPAWN.x, SPAWN.y);
 const raidSys = createRaidSystem({
   io, prisma, MAP, socketByUser, meByUser, teleportHome,
   clearing: inClearing,
@@ -261,13 +310,21 @@ const raidSys = createRaidSystem({
   setBusy: (uid, v) => { v ? battlingUsers.add(uid) : battlingUsers.delete(uid); markCombat(uid, v ? 'raid' : null); }, // usado pela raid
 });
 
-const chat = createChat({ io, socketByUser, meByUser, groupMembers: raidSys.groupMembers });
+registerAdmin({
+  app, prisma, auth, moderation, io, socketByUser, meByUser, raidSys, teleportTo, nextFreeSlot, invOf, TILE,
+  isBusy: (uid) => battlingUsers.has(uid),
+  world: { wilds, spawnAdminWild, clearAdminWilds, isWalkable: (tx, ty) => { const t = MAP[ty]?.[tx]; return t !== undefined && t !== 2 && t !== 3; } },
+});
+
+const chat = createChat({ io, socketByUser, meByUser, groupMembers: raidSys.groupMembers, moderation });
 
 io.use(async (socket, next) => {
   try {
     const { id } = jwt.verify(socket.handshake.auth.token, JWT_SECRET);
     const user = await prisma.user.findUnique({ where: { id } });
     if (!user) return next(new Error('Usuário não encontrado'));
+    const ban = moderation.banOf(user.id);
+    if (ban) return next(new Error('Conta banida ' + moderation.describe(ban)));
     socket.data.user = user;
     next();
   } catch {
@@ -281,7 +338,7 @@ io.on('connection', (socket) => {
   // Evita sessão duplicada da mesma conta
   for (const [sid, p] of players) if (p.id === u.id) io.sockets.sockets.get(sid)?.disconnect(true);
 
-  const me = { id: u.id, username: u.username, x: u.x, y: u.y, dir: 'down', combat: null };
+  const me = { id: u.id, username: u.username, x: u.x, y: u.y, dir: 'down', combat: null, role: u.role };
   players.set(socket.id, me);
   socketByUser.set(u.id, socket);
   meByUser.set(u.id, me);
@@ -479,6 +536,7 @@ async function main() {
   await prisma.$connect();
   console.log('Banco conectado');
   await tuneDatabase();
+  console.log('Moderação: ' + (await moderation.load()) + ' punição(ões) ativa(s) carregada(s)');
   startBackups(prisma);
   server.listen(PORT, '0.0.0.0', () => console.log(`Servidor em http://localhost:${PORT}`));
 }

@@ -373,3 +373,44 @@ h1 span { background: linear-gradient(90deg, var(--red), var(--gold)); -webkit-b
   .hint { margin-left: auto; max-width: calc(100vw - 620px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
 @media (min-width: 641px) and (max-width: 1000px) { .hint { display: none; } }
+/* ================= Painel de administração (mobile-first) ================= */
+#admin { width: min(480px, 100%); }
+.atabs { display: flex; gap: 6px; overflow-x: auto; padding: 0 0 10px; scrollbar-width: none; }
+.atabs::-webkit-scrollbar { display: none; }
+.atabs button { flex: 1 0 auto; min-height: 44px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,.06); color: var(--muted); font: 700 13px var(--font); cursor: pointer; }
+.atabs button.active { background: var(--blue); color: #fff; border-color: transparent; }
+.af { width: 100%; min-width: 0; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(0,0,0,.28); color: var(--text); font: 500 16px var(--font); outline: none; }
+.af:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(77,163,255,.2); }
+select.af { appearance: auto; }
+textarea.af { resize: vertical; }
+.al { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; flex: 1; min-width: 0; }
+.arow2 { display: flex; gap: 8px; }
+.arow2 > * { flex: 1; min-width: 0; }
+#adminBody { gap: 10px; }
+.arow { border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,.05); overflow: hidden; }
+.ahead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; min-height: 48px; cursor: pointer; }
+.ahead b { text-transform: none; }
+.apos { margin-left: auto; font-size: 11px; color: var(--muted); }
+.aacts { display: none; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 12px 12px; }
+.arow.open .aacts { display: grid; }
+.ab { min-height: 44px; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,.08); color: var(--text); font: 700 13px var(--font); cursor: pointer; }
+.ab:hover { background: rgba(255,255,255,.16); }
+.ab.danger { background: rgba(255,77,94,.22); border-color: rgba(255,77,94,.5); }
+.ab.ok { background: rgba(61,220,151,.2); border-color: rgba(61,220,151,.5); }
+.aform { grid-column: 1 / -1; display: grid; gap: 8px; }
+.ahint { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
+.abadge { font-style: normal; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 999px; background: rgba(255,255,255,.14); }
+.abadge.adm { background: var(--red); color: #fff; }
+.abadge.bn { background: #7a1f2b; color: #fff; }
+.abadge.off { color: var(--muted); }
+.astats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.astats > div { padding: 10px; border-radius: 12px; background: rgba(255,255,255,.06); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.astats b { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.astats span { font-size: 11px; color: var(--muted); }
+.alog { font-size: 12px; padding: 6px 2px; border-bottom: 1px solid var(--line); word-break: break-word; }
+.alog span { color: var(--muted); }
+.cm .adm { display: inline-block; background: var(--red); color: #fff; font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 6px; margin-right: 5px; vertical-align: 1px; }
+@media (max-width: 640px) { #admin { height: 88vh; } .astats { grid-template-columns: 1fr 1fr; } }
+
+/* itens de listas rolaveis nao devem encolher (ex.: caixa de aviso do painel admin) */
+.list > * { flex-shrink: 0; }

@@ -5,7 +5,7 @@ const MAX_LEN = 200;
 const BURST = 5; // mensagens seguidas permitidas
 const REFILL_MS = 1500; // 1 mensagem nova liberada a cada 1,5 s
 
-module.exports = function createChat({ io, socketByUser, meByUser, groupMembers }) {
+module.exports = function createChat({ io, socketByUser, meByUser, groupMembers, moderation }) {
   const history = [];
   const buckets = new Map(); // uid -> { tokens, last }
   let nextId = 1;
@@ -31,8 +31,10 @@ module.exports = function createChat({ io, socketByUser, meByUser, groupMembers 
       if (!me || !p || typeof p !== 'object') return;
       const text = clean(p.text);
       if (!text) return;
+      const muted = moderation.muteOf(uid);
+      if (muted) return error('🔇 Você está silenciado ' + moderation.describe(muted));
       if (!allow(uid)) return error('Devagar! Você está enviando mensagens rápido demais.');
-      const base = { id: nextId++, from: me.username, fromId: uid, text, ts: Date.now() };
+      const base = { id: nextId++, from: me.username, fromId: uid, text, ts: Date.now(), admin: me.role === 'admin' };
 
       if (p.ch === 'group') {
         const members = groupMembers(uid);

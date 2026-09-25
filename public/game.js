@@ -3,6 +3,7 @@ let token = null;
 let mode = 'login';
 let inBattle = false;
 let MY_ID = null;
+let IS_ADMIN = false; // vem do servidor no login; o servidor confere de novo a cada ação do painel
 let GROUP = null; // { id, leader, members:[{id, username}] }
 let BOSS = null; // { species_id, x, y, until }
 let BOSS_NEXT = null; // timestamp local do próximo boss
@@ -55,6 +56,8 @@ $('loginForm').addEventListener('submit', async (e) => {
     $('avatar').textContent = body.username[0];
     $('login').hidden = true;
     $('hud').hidden = false;
+    IS_ADMIN = body.role === 'admin';
+    $('adminBtn').hidden = !IS_ADMIN;
     initChat();
     startGame();
   } catch (err) {
@@ -266,6 +269,7 @@ function chatLine(m) {
   t.textContent = new Date(m.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   el.append(t);
   if (m.ch === 'group') { const g = document.createElement('span'); g.className = 'tag'; g.textContent = '[Grupo]'; el.append(g); }
+  if (m.admin) { const a = document.createElement('span'); a.className = 'adm'; a.textContent = 'ADM'; el.append(a); }
   const who = document.createElement('b');
   who.textContent = m.ch === 'w' ? (m.fromId === MY_ID ? 'para ' + m.to : m.from + ' sussurra') : m.from;
   who.style.color = 'hsl(' + hueOf(m.from) + ', 75%, 72%)';
@@ -384,6 +388,7 @@ class WorldScene extends Phaser.Scene {
     this.socket = io({ auth: { token } });
     this.socket.on('connect_error', (err) => showOffline('Conexão recusada', err.message));
     this.socket.on('disconnect', (reason) => {
+      if (window.__adminEnd) return; // já mostramos o motivo (banido/expulso)
       if (reason === 'io server disconnect') showOffline('Desconectado', 'Sua conta foi aberta em outro lugar ou a sessão foi encerrada.');
       else $('offline').hidden = false;
     });
@@ -413,6 +418,9 @@ class WorldScene extends Phaser.Scene {
     this.socket.on('chat:history', (list) => { chat.msgs.global = list.slice(); if (chat.tab === 'global') renderChat(); });
     this.socket.on('chat:msg', addChat);
     this.socket.on('chat:error', (m) => toast(m));
+    this.socket.on('inventory', (inv) => setBalls(inv)); // um admin entregou itens
+    this.socket.on('banned', ({ reason }) => { window.__adminEnd = true; showOffline('Conta banida', 'Um administrador baniu esta conta.' + (reason ? ' Motivo: ' + reason : '')); });
+    this.socket.on('kicked', ({ reason }) => { window.__adminEnd = true; showOffline('Você foi expulso', 'Um administrador desconectou você.' + (reason ? ' Motivo: ' + reason : '')); });
     this.socket.on('player:combat', ({ id, combat }) => this.setCombat(id, combat));
     Battle.init(this.socket);
     this.socket.on('notice', ({ msg, big }) => toast(msg, big));

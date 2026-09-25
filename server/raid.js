@@ -94,16 +94,16 @@ module.exports = function createRaidSystem(ctx) {
   const bossPublic = () => (boss && !boss.busy ? { species_id: boss.species_id, x: boss.x, y: boss.y, left: Math.max(0, boss.expiresAt - Date.now()) } : null);
   const emitBoss = (target = io) => target.emit('boss:state', { boss: bossPublic(), nextIn: nextAt ? Math.max(0, nextAt - Date.now()) : null });
 
-  function spawnBoss() {
-    if (boss) return false;
+  function spawnBoss(forced, lifeMs) { // forced/lifeMs: usados pelo painel admin
+    if (boss && (!forced || boss.busy)) return false;
     let tx, ty;
     for (let i = 0; i < 500; i++) {
       tx = rand(4, 95); ty = rand(4, 95);
       const d = Math.hypot(tx - 50, ty - 50), t = MAP[ty][tx];
       if ((t === 0 || t === 4) && d >= 18 && d <= 38 && !clearing(tx, ty)) break;
     }
-    const species_id = pickSpecies(BOSS_TABLE);
-    boss = { species_id, tx, ty, x: tx * 32 + 16, y: ty * 32 + 16, expiresAt: Date.now() + CFG.life, busy: false };
+    const species_id = forced || pickSpecies(BOSS_TABLE);
+    boss = { species_id, tx, ty, x: tx * 32 + 16, y: ty * 32 + 16, expiresAt: Date.now() + (lifeMs || CFG.life), busy: false };
     io.emit('notice', { msg: `✦ ${bossName(species_id)} lendário (Lv.${BOSS_LEVEL}) apareceu! Treine sua equipe, forme um grupo (G) e enfrente-o!`, big: true });
     emitBoss();
     console.log(`Boss: ${bossName(species_id)} em (${tx},${ty})`);
@@ -474,5 +474,8 @@ module.exports = function createRaidSystem(ctx) {
     invites.delete(uid);
   }
 
-  return { bind, onDisconnect, onMove: (uid) => tryStart(uid), inRaid: (uid) => raids.has(uid), groupMembers: (uid) => { const g = groups.get(groupOf.get(uid)); return g ? [...g.members] : []; } };
+  return { bind, onDisconnect, onMove: (uid) => tryStart(uid), inRaid: (uid) => raids.has(uid),
+    adminSpawnBoss: (species_id) => (spawnBoss(species_id || undefined, 60 * 60000) ? { ok: true } : { error: 'Há uma raid em andamento' }),
+    bossInfo: () => (boss ? { species_id: boss.species_id, tx: boss.tx, ty: boss.ty, busy: boss.busy, leftMin: Math.max(0, Math.round((boss.expiresAt - Date.now()) / 60000)) } : null),
+    groupMembers: (uid) => { const g = groups.get(groupOf.get(uid)); return g ? [...g.members] : []; } };
 };

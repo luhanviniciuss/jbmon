@@ -13,7 +13,8 @@
     "setup": "prisma db push",
     "studio": "prisma studio",
     "export": "node scripts/export.js",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "make-admin": "node scripts/make-admin.js"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

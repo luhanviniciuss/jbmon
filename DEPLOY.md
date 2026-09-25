@@ -129,6 +129,13 @@ sudo systemctl start jbmon
 Faça isso **uma única vez**: depois o banco vivo é o de `/var/lib/jbmon`; copiar o seed por cima de novo apaga o progresso dos jogadores.
 Entre com uma conta antiga para confirmar. Pule esta etapa para começar com o mundo limpo.
 
+### Torne a sua conta administradora (painel admin)
+O banco copiado ainda não sabe quem é admin (a coluna `role` é nova). Depois que o serviço subir pelo menos uma vez (o `npm start` cria as colunas), rode:
+```bash
+cd /opt/jbmon && sudo -u jbmon npm run make-admin -- admin
+```
+(troque `admin` pelo nome da sua conta). Faça logout e login no jogo: o botão 🛡 Admin aparece. Só quem tem acesso ao servidor consegue conceder esse papel.
+
 ## Manutenção do dia a dia
 | Preciso de… | Comando |
 |---|---|

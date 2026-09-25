@@ -14,6 +14,10 @@ public/items.js        Pokébolas, materiais e receitas de craft (compartilhado)
 server/battle.js       Regras de batalha, tipos, dano, captura, EXP
 server/raid.js         Grupos, boss lendário a cada 3 h e raid cooperativa
 server/chat.js         Chat global, de grupo e sussurros
+server/admin.js        API do painel de administração (/api/admin/*)
+server/moderation.js   Bans e silenciamentos ativos (cache do banco)
+public/admin.js        Interface do painel admin (só para contas admin)
+scripts/make-admin.js  Concede/retira o papel de administrador
 server/durable.js      Gravações com retry e fila durável
 server/backup.js       Backup periódico do banco
 deploy/                Arquivos para VPS (systemd e Caddy); veja DEPLOY.md
@@ -69,6 +73,17 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 - **Celular** (até 640 px): HUD compacto no topo; Party, Bolsa, Grupo e Chat viram **botões flutuantes de 52 px** no canto inferior direito (alcance do polegar); equipe, bolsa e grupo abrem como gaveta inferior; alvos de toque ≥ 44 px; campos com fonte de 16 px (o iPhone não dá zoom ao digitar); respeita a área segura (notch) e o teclado virtual não cobre o chat (`interactive-widget=resizes-content`).
 - **Desktop**: botões em pílulas no topo direito com os atalhos (P, B, G, Enter) e chat fixo.
 - Toda tela nova deve ser pensada primeiro para ~375 px e testada nos dois tamanhos.
+
+## Painel de administração
+- **Quem é admin**: só contas com papel `admin` no **banco**, concedido por quem tem acesso ao servidor: `npm run make-admin -- nome_da_conta` (`--revoke` para retirar). O papel é conferido no banco a **cada ação**; o cliente não decide nada, e um jogador comum que adultere a tela recebe 403. No VPS: `cd /opt/jbmon && sudo -u jbmon npm run make-admin -- admin`.
+- **Onde**: botão 🛡 **Admin** (só aparece para admins), gaveta no celular e painel lateral no PC. Abas:
+  - **Jogadores**: online agora e busca de qualquer conta; por jogador: **Ir até**, **Trazer**, **Curar**, **Silenciar** / liberar chat, **Banir** / desbanir e **Expulsar**. Silêncio e ban aceitam duração (5 min a 30 dias ou permanente) e motivo.
+  - **Spawn**: cria Pokémon selvagens de **qualquer espécie e nível (1 a 100)**, de 1 a 25, perto de você ou em coordenadas; somem sozinhos (10 min a 4 h) e não deixam substituto se derrotados. Também **chama o boss lendário agora** (sorteio ou espécie escolhida) e limpa os spawns de admin.
+  - **Dar**: entrega um Pokémon (nível 1-100) ou itens (bolas, Bolotas, Fragmentos) a um jogador, e cura a equipe dele. Itens e cura são recusados se o jogador estiver em combate (senão o servidor sobrescreveria).
+  - **Sistema**: jogadores online, selvagens, memória, tempo no ar, boss atual; **aviso para todos**, teletransporte por coordenadas e a **auditoria** (últimas ações).
+- **Punições**: o ban impede login, uso da API e conexão do socket (mesmo com token antigo), expulsa o jogador na hora e **sobrevive a reinícios** (colunas `banned_until` / `muted_until`). Silenciados não conseguem falar em nenhum canal e recebem o motivo. Admins não podem ser banidos/silenciados por outros admins nem por si mesmos.
+- **Auditoria**: toda ação fica na tabela `AdminLog` (quem, o quê, alvo e detalhes).
+- **Selo ADM** no chat e nomes reservados (`admin`, `moderador`, `gm`, `sistema`…) que jogadores comuns não conseguem registrar.
 
 ## Como funciona
 - **Auth**: `POST /api/register|login` devolve um JWT, usado no handshake do Socket.io e na API (`GET /api/party`).

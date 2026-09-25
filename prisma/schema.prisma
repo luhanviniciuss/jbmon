@@ -13,6 +13,11 @@ model User {
   password_hash String
   x             Float     @default(1600)
   y             Float     @default(1600)
+  role          String    @default("player") // "player" ou "admin" (só se concede pelo servidor: npm run make-admin)
+  banned_until  DateTime? // conta banida até esta data (9999 = permanente)
+  ban_reason    String?
+  muted_until   DateTime? // silenciado no chat até esta data
+  mute_reason   String?
   pokeballs     Int       @default(10)
   greatballs    Int       @default(0)
   ultraballs    Int       @default(0)
@@ -44,4 +49,15 @@ model Pokemon {
 model Meta {
   key   String @id
   value String
+}
+
+// Auditoria: tudo que um administrador faz fica registrado aqui
+model AdminLog {
+  id         Int      @id @default(autoincrement())
+  admin_id   Int
+  admin_name String
+  action     String
+  target     String   @default("")
+  details    String   @default("")
+  created_at DateTime @default(now())
 }

@@ -42,6 +42,7 @@
       <button class="fab glass" id="partyBtn" aria-label="Abrir equipe"><span class="ic"><span class="ball sm"></span></span><span class="lbl">Party</span><kbd>P</kbd></button>
       <button class="fab glass" id="bagBtn" aria-label="Abrir bolsa"><span class="ic">🎒</span><span class="lbl">Bolsa</span><kbd>B</kbd></button>
       <button class="fab glass" id="groupBtn" aria-label="Abrir grupo"><span class="ic">👥</span><span class="lbl">Grupo</span><kbd>G</kbd></button>
+      <button class="fab glass" id="adminBtn" hidden aria-label="Painel de administração"><span class="ic">🛡</span><span class="lbl">Admin</span></button>
       <button class="fab glass" id="chatBtn" aria-label="Abrir chat"><span class="ic">💬</span><span class="lbl">Chat</span><kbd>Enter</kbd><i class="badge" id="chatBadge" hidden>0</i></button>
     </div>
 
@@ -73,6 +74,13 @@
     <button class="btn small" id="invYes">Aceitar</button>
     <button class="btn small ghost" id="invNo">Recusar</button>
   </div>
+
+  <!-- Painel de administração (só para contas admin) -->
+  <aside id="admin" class="drawer glass" aria-hidden="true">
+    <header><h2>🛡 Administração</h2><button class="close" id="closeAdmin" aria-label="Fechar">✕</button></header>
+    <nav class="atabs"><button data-tab="players" class="active">Jogadores</button><button data-tab="spawn">Spawn</button><button data-tab="give">Dar</button><button data-tab="sys">Sistema</button></nav>
+    <div id="adminBody" class="list"></div>
+  </aside>
 
   <!-- Batalha -->
   <div id="battle" class="battle" hidden>
@@ -137,5 +145,6 @@
   <script src="/items.js"></script>
   <script src="/game.js"></script>
   <script src="/battle.js"></script>
+  <script src="/admin.js"></script>
 </body>
 </html>

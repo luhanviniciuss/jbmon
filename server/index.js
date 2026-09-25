@@ -7,9 +7,12 @@ const jwt = require('jsonwebtoken');
 const { Server } = require('socket.io');
 const { PrismaClient } = require('@prisma/client');
 const { MAP_W, TILE, PLAYER_SPEED, CLEAR_MIN, CLEAR_MAX, generateMap } = require('../public/map.js');
-const { SPECIES, calcStats } = require('../public/species.js');
+const { SPECIES, WILD_TABLE, WATER_TABLE, calcStats } = require('../public/species.js');
 const { BALLS, RECIPES } = require('../public/items.js');
 const { pickSpecies, makeWild, resolveTurn, mineView, wildView } = require('./battle.js');
+const createRaidSystem = require('./raid.js');
+const { retry, durable, flushPending, pendingCount } = require('./durable.js');
+const { startBackups } = require('./backup.js');
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
@@ -29,6 +32,8 @@ const isBlocked = (x, y) => {
 // Encontros
 const STARTERS = [1, 4, 7]; // Bulbasaur, Charmander, Squirtle
 const WILD_COUNT = 70;
+const WATER_COUNT = 24;
+const WATER_TOUCH = 50; // px: Pokémon na água são alcançados da margem
 const WILD_WANDER = 3; // tiles de distância máxima do "lar"
 const TOUCH_RADIUS = 28; // px: encostar num selvagem inicia a batalha
 const RESPAWN_MS = 15000;
@@ -50,32 +55,43 @@ MAP.forEach((row, y) => row.forEach((t, x) => { if (t === 4 && !inClearing(x, y)
 const wilds = new Map(); // id -> { id, species_id, level, tx, ty, homeX, homeY, x, y, busy }
 let nextWildId = 1;
 const wildLevelAt = (tx, ty) => Math.max(2, Math.min(40, 2 + Math.floor(Math.hypot(tx - 50, ty - 50) / 9) + rand(-1, 2))); // mais forte longe do centro
-const wildPublic = (w) => ({ id: w.id, species_id: w.species_id, level: w.level, x: w.x, y: w.y });
+const shoreWater = []; // tiles de água encostados em terra: onde os Pokémon aquáticos vivem
+MAP.forEach((row, y) => row.forEach((t, x) => {
+  if (t !== 2) return;
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+    const n = MAP[y + dy]?.[x + dx];
+    if (n === 0 || n === 1 || n === 4) { shoreWater.push([x, y]); return; }
+  }
+}));
+const wildPublic = (w) => ({ id: w.id, species_id: w.species_id, level: w.level, x: w.x, y: w.y, water: !!w.water });
 
-function spawnWild() {
-  let id = pickSpecies();
+function spawnWild(water = false) {
+  const table = water ? WATER_TABLE : WILD_TABLE;
+  const pool = water ? shoreWater : grassTiles;
+  let id = pickSpecies(table);
   // No máximo um de cada lendário vivo no mapa
-  for (let i = 0; i < 10 && SPECIES[id].rarity === 'legendary' && [...wilds.values()].some((w) => w.species_id === id); i++) id = pickSpecies();
+  for (let i = 0; i < 10 && SPECIES[id].rarity === 'legendary' && [...wilds.values()].some((w) => w.species_id === id); i++) id = pickSpecies(table);
   const rarity = SPECIES[id].rarity;
   let tile;
   for (let i = 0; i < 300; i++) {
-    tile = grassTiles[rand(0, grassTiles.length - 1)];
+    tile = pool[rand(0, pool.length - 1)];
     const d = Math.hypot(tile[0] - 50, tile[1] - 50);
     if (rarity === 'legendary' ? d >= 40 : Math.random() < 0.4 || d < 30) break; // lendários só longe do centro
   }
   const [tx, ty] = tile;
   const level = rarity === 'legendary' ? 40 + rand(0, 5) : Math.min(50, wildLevelAt(tx, ty) + LEVEL_BONUS[rarity]);
-  const w = { id: nextWildId++, species_id: id, level, tx, ty, homeX: tx, homeY: ty, x: tx * TILE + TILE / 2, y: ty * TILE + TILE / 2, busy: false };
+  const w = { id: nextWildId++, species_id: id, level, water, tx, ty, homeX: tx, homeY: ty, x: tx * TILE + TILE / 2, y: ty * TILE + TILE / 2, busy: false };
   wilds.set(w.id, w);
   return w;
 }
 if (grassTiles.length) for (let i = 0; i < WILD_COUNT; i++) spawnWild();
+if (shoreWater.length) for (let i = 0; i < WATER_COUNT; i++) spawnWild(true);
 console.log(`${wilds.size} Pokémon selvagens (${grassTiles.length} tiles de grama alta)`);
 
 const releaseWild = (w) => { w.busy = false; io.emit('wild:add', wildPublic(w)); }; // fugiu/perdeu: volta ao mapa
 const defeatWild = (w) => { // venceu/capturou: some e um novo nasce depois
   wilds.delete(w.id);
-  setTimeout(() => { if (grassTiles.length) io.emit('wild:add', wildPublic(spawnWild())); }, RESPAWN_MS);
+  setTimeout(() => io.emit('wild:add', wildPublic(spawnWild(!!w.water))), RESPAWN_MS);
 };
 
 setInterval(() => { // vagueiam perto de casa
@@ -84,7 +100,8 @@ setInterval(() => { // vagueiam perto de casa
     if (w.busy || Math.random() > 0.35) continue;
     const [dx, dy] = [[1, 0], [-1, 0], [0, 1], [0, -1]][rand(0, 3)];
     const nx = w.tx + dx, ny = w.ty + dy, t = MAP[ny]?.[nx];
-    if (t === undefined || t === 2 || t === 3 || inClearing(nx, ny) || Math.abs(nx - w.homeX) > WILD_WANDER || Math.abs(ny - w.homeY) > WILD_WANDER) continue;
+    if (w.water ? t !== 2 : t === undefined || t === 2 || t === 3 || inClearing(nx, ny)) continue; // aquáticos ficam na água
+    if (Math.abs(nx - w.homeX) > WILD_WANDER || Math.abs(ny - w.homeY) > WILD_WANDER) continue;
     Object.assign(w, { tx: nx, ty: ny, x: nx * TILE + TILE / 2, y: ny * TILE + TILE / 2 });
     moved.push({ id: w.id, x: w.x, y: w.y });
   }
@@ -164,7 +181,7 @@ app.post('/api/craft', auth, async (req, res) => {
   const data = { apricorns: { decrement: cost.apricorns }, shards: { decrement: cost.shards } };
   for (const [kind, n] of Object.entries(recipe.gives)) data[BALLS[kind].col] = { increment: n };
   // updateMany com condição = débito atômico (sem corrida entre dois cliques)
-  const { count } = await prisma.user.updateMany({ where: { id: req.user.id, apricorns: { gte: cost.apricorns }, shards: { gte: cost.shards } }, data });
+  const { count } = await retry(() => prisma.user.updateMany({ where: { id: req.user.id, apricorns: { gte: cost.apricorns }, shards: { gte: cost.shards } }, data }));
   if (!count) return res.status(400).json({ error: 'Materiais insuficientes' });
   const user = await prisma.user.findUnique({ where: { id: req.user.id } });
   res.json({ balls: invOf(user), mats: matsOf(user) });
@@ -174,13 +191,36 @@ app.post('/api/craft', auth, async (req, res) => {
 const players = new Map(); // socket.id -> { id, username, x, y, dir }
 const clamp = (v) => Math.max(0, Math.min(MAP_PX, Number(v) || 0));
 
-async function savePosition(p) {
+async function savePosition(p, force = false) {
+  if (!force && p.sx === p.x && p.sy === p.y) return; // só grava se mudou desde a última vez
+  const { x, y } = p;
   try {
-    await prisma.user.update({ where: { id: p.id }, data: { x: p.x, y: p.y } });
+    await retry(() => prisma.user.update({ where: { id: p.id }, data: { x, y } }));
+    p.sx = x;
+    p.sy = y;
   } catch (e) {
     console.error('Falha ao salvar posição', e.message);
   }
 }
+
+const socketByUser = new Map(); // uid -> socket
+const meByUser = new Map(); // uid -> { id, username, x, y }
+function teleportHome(uid) {
+  const me = meByUser.get(uid);
+  if (!me) return;
+  me.x = SPAWN.x;
+  me.y = SPAWN.y;
+  const sock = socketByUser.get(uid);
+  sock?.emit('player:correct', { x: me.x, y: me.y });
+  sock?.broadcast.emit('player:moved', { id: me.id, x: me.x, y: me.y, dir: me.dir });
+  savePosition(me);
+}
+const raidSys = createRaidSystem({
+  io, prisma, MAP, socketByUser, meByUser, teleportHome,
+  clearing: inClearing,
+  isBusy: (uid) => battlingUsers.has(uid),
+  setBusy: (uid, v) => (v ? battlingUsers.add(uid) : battlingUsers.delete(uid)),
+});
 
 io.use(async (socket, next) => {
   try {
@@ -202,6 +242,9 @@ io.on('connection', (socket) => {
 
   const me = { id: u.id, username: u.username, x: u.x, y: u.y, dir: 'down' };
   players.set(socket.id, me);
+  socketByUser.set(u.id, socket);
+  meByUser.set(u.id, me);
+  raidSys.bind(socket, u.id);
 
   socket.emit('players:init', {
     self: me,
@@ -222,7 +265,7 @@ io.on('connection', (socket) => {
   let immuneUntil = 0;
   let lastHeal = 0;
 
-  const persist = (b, drops) =>
+  const persist = (b, drops, capture) =>
     prisma.$transaction([
       ...b.team.map((p) =>
         prisma.pokemon.update({
@@ -237,6 +280,7 @@ io.on('connection', (socket) => {
           ...(drops ? { apricorns: { increment: drops.apricorns }, shards: { increment: drops.shards } } : {}),
         },
       }),
+      ...(capture ? [prisma.pokemon.create({ data: { user_id: u.id, ...capture } })] : []),
     ]);
 
   async function startBattle(w) {
@@ -270,10 +314,10 @@ io.on('connection', (socket) => {
       const hurt = all.filter((p) => p.current_hp < p.hp);
       if (!hurt.length && usr.pokeballs >= HEAL_BALLS) return;
       const pokeballs = Math.max(usr.pokeballs, HEAL_BALLS);
-      await prisma.$transaction([
+      await retry(() => prisma.$transaction([
         ...hurt.map((p) => prisma.pokemon.update({ where: { id: p.id }, data: { current_hp: p.hp } })),
         prisma.user.update({ where: { id: u.id }, data: { pokeballs } }),
-      ]);
+      ]));
       socket.emit('party:healed', { balls: invOf({ ...usr, pokeballs }) });
     } catch (e) {
       console.error('Falha ao curar', e.message);
@@ -291,9 +335,10 @@ io.on('connection', (socket) => {
         me.x = SPAWN.x;
         me.y = SPAWN.y;
       }
-      if (r.capture) await prisma.pokemon.create({ data: { user_id: u.id, ...r.capture } });
-      await persist(b, r.drops);
-      if (r.result === 'lose') await savePosition(me);
+      // Tudo do turno (HP/EXP/evolução, bolas gastas, materiais e o Pokémon capturado) numa transação só,
+      // gravada ANTES de avisar o jogador do resultado.
+      await durable('batalha', () => persist(b, r.drops, r.capture));
+      if (r.result === 'lose') await savePosition(me, true);
 
       socket.emit('battle:update', { log: r.log, result: r.result, balls: b.inv, drops: r.drops || null, capture: r.capture ? { species_id: r.capture.species_id } : null });
       if (r.result) {
@@ -325,7 +370,7 @@ io.on('connection', (socket) => {
     budget = Math.min(BUDGET_CAP, budget + ((now - last) / 1000) * MAX_SPEED);
     last = now;
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-    if (battle || starting) return socket.emit('player:correct', { x: me.x, y: me.y }); // parado em batalha
+    if (battle || starting || raidSys.inRaid(u.id)) return socket.emit('player:correct', { x: me.x, y: me.y }); // parado em batalha
 
     const dist = Math.hypot(x - me.x, y - me.y);
     if (dist > budget || isBlocked(x, y)) {
@@ -343,9 +388,10 @@ io.on('connection', (socket) => {
     const tx = Math.floor(me.x / TILE);
     const ty = Math.floor(me.y / TILE);
     const key = `${tx},${ty}`;
-    if (now >= immuneUntil && !battle && !starting) {
+    raidSys.onMove(u.id);
+    if (now >= immuneUntil && !battle && !starting && !raidSys.inRaid(u.id)) {
       for (const w of wilds.values()) {
-        if (!w.busy && Math.hypot(me.x - w.x, me.y - w.y) < TOUCH_RADIUS) { startBattle(w); return; }
+        if (!w.busy && Math.hypot(me.x - w.x, me.y - w.y) < (w.water ? WATER_TOUCH : TOUCH_RADIUS)) { startBattle(w); return; }
       }
     }
     if (key === lastTile) return;
@@ -357,21 +403,37 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', async () => {
+    raidSys.onDisconnect(u.id);
     if (battle) releaseWild(battle.world);
+    if (socketByUser.get(u.id) === socket) { socketByUser.delete(u.id); meByUser.delete(u.id); }
     setBusy(false);
     players.delete(socket.id);
     io.emit('player:left', me.id);
     io.emit('online', players.size);
-    await savePosition(me);
+    await savePosition(me, true);
   });
 });
 
 // Persistência periódica (crash safety)
-setInterval(() => players.forEach(savePosition), 15000);
+setInterval(() => players.forEach((p) => savePosition(p)), 5000);
+
+// SQLite: WAL + synchronous=FULL = cada commit vai para o disco, mesmo se o processo/PC cair.
+async function tuneDatabase() {
+  try {
+    const [j] = await prisma.$queryRawUnsafe('PRAGMA journal_mode=WAL');
+    await prisma.$queryRawUnsafe('PRAGMA synchronous=FULL');
+    await prisma.$queryRawUnsafe('PRAGMA busy_timeout=10000');
+    console.log(`SQLite: journal_mode=${j?.journal_mode}, synchronous=FULL`);
+  } catch (e) {
+    console.error('Não foi possível ajustar o SQLite:', e.message);
+  }
+}
 
 async function main() {
   await prisma.$connect();
   console.log('Banco conectado');
+  await tuneDatabase();
+  startBackups(prisma);
   server.listen(PORT, () => console.log(`Servidor em http://localhost:${PORT}`));
 }
 main().catch((e) => {
@@ -379,7 +441,23 @@ main().catch((e) => {
   process.exit(1);
 });
 
-process.on('SIGINT', async () => {
-  await Promise.all([...players.values()].map(savePosition));
+// Desligamento seguro: grava posições, esvazia a fila de gravações pendentes e fecha o banco.
+let closing = false;
+async function shutdown(sig) {
+  if (closing) return;
+  closing = true;
+  console.log(`${sig}: salvando tudo antes de sair…`);
+  try {
+    await Promise.all([...players.values()].map((p) => savePosition(p, true)));
+    await flushPending();
+    if (pendingCount()) console.error(`Atenção: ${pendingCount()} gravação(ões) pendente(s) não puderam ser salvas`);
+    await prisma.$queryRawUnsafe('PRAGMA wal_checkpoint(TRUNCATE)');
+    await prisma.$disconnect();
+  } catch (e) {
+    console.error('Erro ao desligar:', e.message);
+  }
   process.exit(0);
-});
+}
+['SIGINT', 'SIGTERM', 'SIGBREAK'].forEach((sig) => process.on(sig, () => shutdown(sig)));
+process.on('uncaughtException', (e) => console.error('uncaughtException:', e));
+process.on('unhandledRejection', (e) => console.error('unhandledRejection:', e));

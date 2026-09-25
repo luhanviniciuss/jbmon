@@ -36,6 +36,8 @@
       <div class="chip glass plain" title="Pokébolas"><span class="ball sm"></span><b id="balls">0</b></div>
       <button class="chip glass btn-icon" id="partyBtn" aria-label="Abrir party"><span class="ball sm"></span><span class="lbl">Party</span><kbd>P</kbd></button>
       <button class="chip glass btn-icon nomargin" id="bagBtn" aria-label="Abrir bolsa"><span class="lbl">🎒 Bolsa</span><kbd>B</kbd></button>
+      <button class="chip glass btn-icon nomargin" id="groupBtn" aria-label="Abrir grupo"><span class="lbl">👥 Grupo</span><kbd>G</kbd></button>
+      <button class="chip glass btn-icon nomargin boss-chip" id="bossChip" hidden></button>
     </div>
 
     <div class="hud-bottom">
@@ -56,16 +58,29 @@
     <div id="bagBody" class="list"></div>
   </aside>
 
+  <!-- Grupo -->
+  <aside id="group" class="drawer glass" aria-hidden="true">
+    <header><h2>Grupo</h2><button class="close" id="closeGroup" aria-label="Fechar">✕</button></header>
+    <div id="groupBody" class="list"></div>
+  </aside>
+  <div id="invite" class="invite glass" hidden>
+    <span id="inviteTxt"></span>
+    <button class="btn small" id="invYes">Aceitar</button>
+    <button class="btn small ghost" id="invNo">Recusar</button>
+  </div>
+
   <!-- Batalha -->
   <div id="battle" class="battle" hidden>
     <div class="b-field">
       <div class="b-card foe glass"><div class="b-name"><b id="foeName"></b><span class="lv" id="foeLv"></span></div><div class="hpbar"><i id="foeHp"></i></div><div class="rar" id="foeRar"></div></div>
+      <div id="raidBar" class="raidbar" hidden></div>
       <div class="platform foe-plat"></div><img id="foeImg" class="b-sprite foe-sprite" alt="" />
       <div class="platform my-plat"></div><img id="myImg" class="b-sprite my-sprite" alt="" />
       <div class="b-card mine glass"><div class="b-name"><b id="myName"></b><span class="lv" id="myLv"></span></div><div class="hpbar"><i id="myHp"></i></div><div class="hp-txt" id="myHpTxt"></div><div class="xpbar"><i id="myXp"></i></div></div>
       <div id="ballFx" class="ball"></div>
     </div>
     <div class="b-panel glass">
+      <div id="turnInfo" class="turninfo" hidden></div>
       <p id="bMsg"></p>
       <div class="b-actions" id="bActions">
         <button class="act a1" data-act="attack">Investida<small>1</small></button>

@@ -2,6 +2,11 @@ const $ = (id) => document.getElementById(id);
 let token = null;
 let mode = 'login';
 let inBattle = false;
+let MY_ID = null;
+let GROUP = null; // { id, leader, members:[{id, username}] }
+let BOSS = null; // { species_id, x, y, until }
+let BOSS_NEXT = null; // timestamp local do próximo boss
+const typeChips = (id) => SPECIES[id].types.map((t) => '<span class="tchip" style="--tc:' + TYPES[t].color + '">' + TYPES[t].label + '</span>').join('');
 let INV = { poke: 0, great: 0, ultra: 0, master: 0 };
 const invTotal = (i) => Object.values(i).reduce((a, b) => a + b, 0);
 const rarityOf = (id) => RARITY[SPECIES[id]?.rarity] || RARITY.common;
@@ -16,12 +21,12 @@ const speciesName = (id) => GEN1[id - 1] || `#${id}`;
 const spriteUrl = (id) => `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`;
 
 // ---------- Utilidades de UI ----------
-function toast(msg) {
+function toast(msg, big) {
   const el = document.createElement('div');
-  el.className = 'toast';
+  el.className = 'toast' + (big ? ' big' : '');
   el.textContent = msg;
   $('toasts').appendChild(el);
-  setTimeout(() => el.remove(), 3300);
+  setTimeout(() => el.remove(), big ? 6300 : 3300);
 }
 
 document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => {
@@ -65,11 +70,11 @@ const statRow = (cls, label, val, max, txt = val) =>
 const monCard = (p, i) => `<div class="mon${p.current_hp <= 0 ? ' fainted' : ''}" style="animation-delay:${i * 60}ms;--rc:${rarityOf(p.species_id).color}">
   <div class="art"><img src="${spriteUrl(p.species_id)}" alt="" onerror="this.style.opacity=.2" /></div>
   <div><div class="top"><span class="name">${p.nickname || speciesName(p.species_id)}</span><span class="lv">Lv. ${p.level}</span></div>
-  <div class="rar" style="--rc:${rarityOf(p.species_id).color}">${rarityOf(p.species_id).label}</div>
+  <div class="tags"><span class="rar" style="--rc:${rarityOf(p.species_id).color}">${rarityOf(p.species_id).label}</span>${typeChips(p.species_id)}</div>
   ${statRow('hp', 'HP', p.current_hp, p.hp, p.current_hp + '/' + p.hp)}${statRow('atk', 'ATK', p.attack, 60)}${statRow('def', 'DEF', p.defense, 60)}${statRow('xp', 'EXP', p.current_exp, p.level * 20)}</div></div>`;
 
 async function openParty(open = !$('drawer').classList.contains('open')) {
-  if (open) $('bag').classList.remove('open');
+  if (open) { $('bag').classList.remove('open'); $('group').classList.remove('open'); }
   const drawer = $('drawer');
   drawer.classList.toggle('open', open);
   drawer.setAttribute('aria-hidden', !open);
@@ -124,17 +129,67 @@ async function openBag(open = !$('bag').classList.contains('open')) {
   el.setAttribute('aria-hidden', !open);
   if (!open) return;
   $('drawer').classList.remove('open');
+  $('group').classList.remove('open');
   $('bagBody').innerHTML = '<p class="empty">Carregando…</p>';
   try { await renderBag(); } catch { $('bagBody').innerHTML = '<p class="empty">Erro ao carregar a bolsa.</p>'; }
 }
 $('bagBtn').addEventListener('click', () => openBag());
+
+// ---------- Grupo ----------
+function renderGroup() {
+  const leader = !GROUP || GROUP.leader === MY_ID;
+  const members = GROUP
+    ? GROUP.members.map((m) => '<div class="item gm"><span class="avatar sm">' + m.username[0] + '</span><div><b>' + m.username + (m.id === GROUP.leader ? ' 👑' : '') + (m.id === MY_ID ? ' (você)' : '') + '</b></div></div>').join('')
+    : '<p class="empty">Você não está em um grupo.</p>';
+  $('groupBody').innerHTML =
+    '<div class="section-title">Seu grupo' + (GROUP ? ' (' + GROUP.members.length + '/4)' : '') + '</div>' + members +
+    (GROUP ? '<button class="btn small danger" id="leaveGroup">Sair do grupo</button>' : '') +
+    (leader ? '<div class="section-title">Convidar jogador</div><div class="invite-form"><input id="invName" placeholder="Nome do jogador" maxlength="16" /><button class="btn small" id="invSend">Convidar</button></div>' +
+      '<div class="section-title">Online agora</div><div id="onlineList" class="chips"><span class="hintline">Carregando…</span></div>' : '') +
+    '<p class="hintline">Lendários aparecem a cada 3 horas. Para enfrentá-los, formem um grupo de 2 a 4 jogadores e encostem no boss juntos. Cada membro age na sua vez; depois que ele ficar exausto, cada um tem uma rodada para lançar uma Pokébola.</p>';
+  $('leaveGroup')?.addEventListener('click', () => window.worldScene?.socket.emit('group:leave'));
+  const send = (name) => name && window.worldScene?.socket.emit('group:invite', name);
+  $('invSend')?.addEventListener('click', () => { send($('invName').value.trim()); $('invName').value = ''; });
+  $('invName')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('invSend').click(); });
+  if (leader) window.worldScene?.socket.emit('online:list');
+  window.__sendInvite = send;
+  $('groupBtn').querySelector('.lbl').textContent = GROUP ? '👥 Grupo ' + GROUP.members.length + '/4' : '👥 Grupo';
+}
+function openGroup(open = !$('group').classList.contains('open')) {
+  $('group').classList.toggle('open', open);
+  $('group').setAttribute('aria-hidden', !open);
+  if (!open) return;
+  $('drawer').classList.remove('open');
+  $('bag').classList.remove('open');
+  renderGroup();
+}
+$('groupBtn').addEventListener('click', () => openGroup());
+$('closeGroup').addEventListener('click', () => openGroup(false));
+let inviteTimer = null;
+$('invYes').addEventListener('click', () => { window.worldScene?.socket.emit('group:accept'); $('invite').hidden = true; });
+$('invNo').addEventListener('click', () => { window.worldScene?.socket.emit('group:decline'); $('invite').hidden = true; });
+
+// ---------- Boss (chip do HUD) ----------
+const fmtTime = (ms) => {
+  const s = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  return h ? h + 'h ' + String(m).padStart(2, '0') + 'm' : m + ':' + String(s % 60).padStart(2, '0');
+};
+setInterval(() => {
+  const chip = $('bossChip');
+  if (!BOSS && BOSS_NEXT === null) return;
+  chip.hidden = false;
+  chip.classList.toggle('live', !!BOSS);
+  chip.textContent = BOSS ? '⚔ ' + SPECIES[BOSS.species_id].name + ' · ' + fmtTime(BOSS.until - Date.now()) : '⏳ Próximo lendário: ' + fmtTime(BOSS_NEXT - Date.now());
+}, 500);
+$('bossChip').addEventListener('click', () => { if (BOSS) window.worldScene?.walkToWorld(BOSS.x, BOSS.y); });
 $('closeBag').addEventListener('click', () => openBag(false));
 $('closeParty').addEventListener('click', () => openParty(false));
 window.addEventListener('keydown', (e) => {
   if (!token || inBattle || document.activeElement.tagName === 'INPUT') return;
   if (e.key.toLowerCase() === 'p') openParty();
   if (e.key.toLowerCase() === 'b') openBag();
-  if (e.key === 'Escape') { openParty(false); openBag(false); }
+  if (e.key.toLowerCase() === 'g') openGroup();
+  if (e.key === 'Escape') { openParty(false); openBag(false); openGroup(false); }
 });
 
 // ---------- Minimapa ----------
@@ -183,6 +238,7 @@ class WorldScene extends Phaser.Scene {
     this.socket.on('connect', () => { $('offline').hidden = true; });
     this.socket.on('online', (n) => { $('online').textContent = n; });
     this.socket.on('players:init', ({ self, others, balls }) => {
+      MY_ID = self.id;
       setBalls(balls);
       this.others.forEach((o) => { o.sprite.destroy(); o.label.destroy(); o.shadow.destroy(); });
       this.others.clear();
@@ -201,7 +257,30 @@ class WorldScene extends Phaser.Scene {
       o.sprite.destroy(); o.label.destroy(); o.shadow.destroy();
       this.others.delete(id);
     });
+    window.worldScene = this;
     Battle.init(this.socket);
+    this.socket.on('notice', ({ msg, big }) => toast(msg, big));
+    this.socket.on('boss:state', ({ boss, nextIn }) => { BOSS_NEXT = nextIn != null ? Date.now() + nextIn : null; this.setBoss(boss); });
+    this.socket.on('group:update', (gr) => { GROUP = gr; $('groupBtn').querySelector('.lbl').textContent = gr ? '👥 Grupo ' + gr.members.length + '/4' : '👥 Grupo'; if ($('group').classList.contains('open')) renderGroup(); });
+    this.socket.on('group:invited', ({ from }) => {
+      $('inviteTxt').textContent = from + ' convidou você para um grupo';
+      $('invite').hidden = false;
+      clearTimeout(inviteTimer);
+      inviteTimer = setTimeout(() => ($('invite').hidden = true), 60000);
+    });
+    this.socket.on('online:list', (names) => {
+      const box = $('onlineList');
+      if (box) box.innerHTML = names.length ? names.map((n) => '<button data-n="' + n + '">' + n + '</button>').join('') : '<span class="hintline">Ninguém disponível agora.</span>';
+      box?.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => window.__sendInvite(b.dataset.n)));
+    });
+    this.socket.on('raid:start', (d) => {
+      inBattle = true;
+      this.player?.setVelocity(0, 0);
+      this.cameras.main.flash(500, 255, 215, 0);
+      this.cameras.main.shake(400, 0.008);
+      openParty(false); openBag(false); openGroup(false);
+      Battle.startRaid(d);
+    });
     // Pokémon selvagens (o servidor manda e controla; aqui só desenhamos)
     this.socket.on('wild:list', (list) => { this.wilds.forEach((w) => this.destroyWild(w)); this.wilds.clear(); list.forEach((w) => this.addWild(w)); });
     this.socket.on('wild:add', (w) => this.addWild(w));
@@ -212,7 +291,7 @@ class WorldScene extends Phaser.Scene {
       this.player?.setVelocity(0, 0);
       this.cameras.main.flash(350, 255, 255, 255);
       this.cameras.main.shake(300, 0.006);
-      openParty(false); openBag(false);
+      openParty(false); openBag(false); openGroup(false);
       setTimeout(() => Battle.start(d), 450);
     });
     this.socket.on('party:healed', ({ balls }) => { setBalls(balls); toast('Centro Pokémon: equipe curada e Pokébolas repostas'); });
@@ -360,12 +439,32 @@ class WorldScene extends Phaser.Scene {
     const tier = SPECIES[d.species_id]?.rarity;
     const star = tier === 'epic' || tier === 'legendary' ? '✦ ' : '';
     const label = this.add.text(d.x, d.y - 34, `${star}${name} Lv.${d.level}`, { fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: '11px', fontStyle: 'bold', color: '#fff', backgroundColor: rar.color + 'e6', padding: { x: 5, y: 2 } }).setOrigin(0.5).setDepth(19);
-    const w = { img, shadow, label };
+    const w = { img, shadow, label, water: d.water };
+    if (d.water) { // aquáticos balançam na água, com brilho azul
+      shadow.setTint(0x9fd8ff).setScale(1.6);
+      this.tweens.add({ targets: img, angle: 6, yoyo: true, repeat: -1, duration: 900 + Math.random() * 500, ease: 'Sine.easeInOut' });
+    }
     if (tier !== 'common') shadow.setTint(Phaser.Display.Color.HexStringToColor(rar.color).color);
     if (tier === 'epic' || tier === 'legendary') this.tweens.add({ targets: img, alpha: 0.7, yoyo: true, repeat: -1, duration: 700 });
     this.wilds.set(d.id, w);
     this.ensureMon(d.species_id, (key) => { if (img.active) img.setTexture(key).setDisplaySize(60, 60); });
   }
+
+  setBoss(b) {
+    if (this.bossObj) { const o = this.bossObj; this.tweens.killTweensOf(o.aura); this.tweens.killTweensOf(o.img); Object.values(o).forEach((x) => x.destroy()); this.bossObj = null; }
+    BOSS = b ? { species_id: b.species_id, x: b.x, y: b.y, until: Date.now() + b.left } : null;
+    if (!b) return;
+    const aura = this.add.circle(b.x, b.y + 6, 54, 0xf0b400, 0.25).setDepth(6);
+    this.tweens.add({ targets: aura, scale: 1.4, alpha: 0.05, yoyo: true, repeat: -1, duration: 900 });
+    const shadow = this.add.image(b.x, b.y + 34, 'shadow').setDepth(6).setScale(2.4);
+    const img = this.add.image(b.x, b.y, 'wilddot').setDepth(8);
+    const label = this.add.text(b.x, b.y - 78, '☠ BOSS · ' + SPECIES[b.species_id].name, { fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: '13px', fontStyle: 'bold', color: '#2b1d00', backgroundColor: '#f0b400', padding: { x: 8, y: 3 } }).setOrigin(0.5).setDepth(20);
+    this.ensureMon(b.species_id, (key) => { if (img.active) img.setTexture(key).setDisplaySize(120, 120); });
+    this.tweens.add({ targets: img, y: b.y - 6, yoyo: true, repeat: -1, duration: 1100, ease: 'Sine.easeInOut' });
+    this.bossObj = { aura, shadow, img, label };
+  }
+
+  walkToWorld(x, y) { this.setTarget({ worldX: x, worldY: y }, false); }
 
   destroyWild(w) { this.tweens.killTweensOf(w.img); w.img.destroy(); w.shadow.destroy(); w.label.destroy(); }
 
@@ -373,7 +472,8 @@ class WorldScene extends Phaser.Scene {
     const S = 150, k = S / MAP_W, c = this.miniCtx;
     c.drawImage(this.mini, 0, 0, S, S);
     const dot = (px, py, col, r) => { c.fillStyle = col; c.beginPath(); c.arc((px / TILE) * k, (py / TILE) * k, r, 0, Math.PI * 2); c.fill(); };
-    this.wilds.forEach((w) => dot(w.img.x, w.img.y, '#ffb02e', 1.8));
+    if (BOSS) { c.lineWidth = 1.5; c.strokeStyle = '#fff'; dot(BOSS.x, BOSS.y, '#f0b400', 4.2); c.stroke(); }
+    this.wilds.forEach((w) => dot(w.img.x, w.img.y, w.water ? '#5ec8ff' : '#ffb02e', 1.8));
     this.others.forEach((o) => dot(o.sprite.x, o.sprite.y, '#4da3ff', 2.5));
     c.lineWidth = 1.5; c.strokeStyle = '#fff'; dot(this.player.x, this.player.y, '#ff4d5e', 3.2); c.stroke();
   }

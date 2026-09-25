@@ -149,9 +149,9 @@ module.exports = function createRaidSystem(ctx) {
   const stateFor = (r, m) => ({
     phase: r.phase,
     boss: { species_id: r.boss.species_id, level: r.level, hp: r.hp, maxHp: r.maxHp },
-    turn: r.turn && { uid: r.turn.uid, left: Math.max(0, r.turn.deadline - Date.now()) },
+    turn: r.turn && { uid: r.turn.uid, left: Math.max(0, r.turn.deadline - Date.now()), forced: !!r.members.find((x) => x.uid === r.turn.uid)?.pendingSwitch },
     members: r.members.map(memberView),
-    you: { balls: m.inv, mine: mineView(m.mine) },
+    you: { balls: m.inv, mine: mineView(m.mine), team: m.team.map(mineView) },
   });
   const emitState = (r, log) => r.members.forEach((m) => !m.left && socketByUser.get(m.uid)?.emit('raid:update', { log, state: stateFor(r, m) }));
 
@@ -238,7 +238,10 @@ module.exports = function createRaidSystem(ctx) {
   function timeout(r, uid) {
     if (r.done || r.turn?.uid !== uid) return;
     const m = r.members.find((x) => x.uid === uid);
-    if (r.phase === 'fight') return act(uid, 'attack');
+    if (r.phase === 'fight') {
+      const t = m.pendingSwitch && m.team.find((p) => p.current_hp > 0);
+      return act(uid, t ? 'switch:' + t.id : 'attack');
+    }
     const log = [{ msg: `${m.username} demorou demais e perdeu a vez!`, bossHp: r.hp }];
     nextTurn(r, log);
     if (!r.done) emitState(r, log);
@@ -262,6 +265,41 @@ module.exports = function createRaidSystem(ctx) {
     r.pendingSaves = r.members.filter((m) => !m.left).map((m) => saveMember(r, m)); // EXP/evolução e materiais já ficam no banco
   }
 
+  // O boss revida em quem agiu. Se o Pokémon cair: com mais de um restante o jogador ESCOLHE o próximo (pendingSwitch,
+  // sem gastar outro turno); com um só, ele entra sozinho; sem nenhum, o jogador é eliminado da luta.
+  function bossRetaliates(r, m, push) {
+    const uid = m.uid;
+    const bName = bossName(r.boss.species_id);
+    const bTypes = SPECIES[r.boss.species_id].types;
+    const my = m.mine;
+    const myTypes = SPECIES[my.species_id].types;
+    const strongEff = effectiveness(bTypes[0], myTypes);
+    const kind = Math.random() < (strongEff > 1 ? 0.7 : strongEff < 1 ? 0.15 : 0.4) ? 'strong' : 'attack';
+    const bmv = getMove(kind, bTypes);
+    if (Math.random() > bmv.acc) push(`${bName} usou ${bmv.name}, mas errou!`);
+    else {
+      const h = calcHit(r.level, bmv, r.atk, my.defense, bTypes, myTypes);
+      const dmg = h.dmg === 0 ? 0 : Math.max(1, Math.floor(h.dmg * DMG_MULT));
+      my.current_hp = Math.max(0, my.current_hp - dmg);
+      push(`${bName} usou ${bmv.name} em ${m.username}!${effText(h.eff)}${h.crit ? ' Acerto crítico!' : ''} (-${dmg})`, null, { target: uid, targetMine: mineView(my) });
+    }
+    if (my.current_hp <= 0) {
+      push(`${nameOf(my)} de ${m.username} desmaiou!`, null, { target: uid, targetMine: mineView(my) });
+      const alive = m.team.filter((p) => p.current_hp > 0);
+      if (alive.length === 1) {
+        m.mine = alive[0];
+        m.fighters.add(alive[0].id);
+        push(`${m.username} enviou ${nameOf(alive[0])}!`, 'switch', { target: uid, targetMine: mineView(alive[0]) });
+      } else if (alive.length > 1) {
+        m.pendingSwitch = true;
+        push(`${m.username} precisa escolher o próximo Pokémon!`);
+      } else {
+        m.eliminated = true;
+        push(`${m.username} não tem mais Pokémon em condições de lutar!`);
+      }
+    }
+  }
+
   async function act(uid, type) {
     const r = raids.get(uid);
     if (!r || r.done || r.busy || r.turn?.uid !== uid) return;
@@ -273,47 +311,41 @@ module.exports = function createRaidSystem(ctx) {
     const bTypes = SPECIES[r.boss.species_id].types;
 
     if (r.phase === 'fight') {
-      if (type !== 'attack' && type !== 'strong') return;
-      clearTimeout(r.timer);
-      const my = m.mine;
-      const myTypes = SPECIES[my.species_id].types;
-      const mv = getMove(type, myTypes);
-      let reached = false;
-      let line;
-      if (Math.random() > mv.acc) line = `${m.username}: ${nameOf(my)} usou ${mv.name}, mas errou!`;
-      else {
-        const h = calcHit(my.level, mv, my.attack, r.def, myTypes, bTypes);
-        r.hp = Math.max(0, r.hp - h.dmg);
-        if (r.hp <= r.threshold) { r.hp = r.threshold; reached = true; }
-        line = `${m.username}: ${nameOf(my)} usou ${mv.name}!${effText(h.eff)}${h.crit ? ' Acerto crítico!' : ''} (-${h.dmg})`;
-      }
-      push(line);
-      if (reached) {
-        push(`${bName} está exausto! Agora é hora de capturá-lo!`, 'exhaust');
-        enterCapture(r, push);
+      const isSwitch = type.startsWith('switch:');
+      if (m.pendingSwitch && !isSwitch) return; // depois de um desmaio só vale escolher o próximo Pokémon
+      if (!isSwitch && type !== 'attack' && type !== 'strong') return;
+      if (isSwitch) {
+        // Troca: voluntária gasta o turno (o boss ataca quem entra); depois de um desmaio é grátis
+        const target = m.team.find((p) => p.id === Number(type.slice(7)));
+        if (!target || target.current_hp <= 0 || target === m.mine) return notice(uid, 'Não dá para trocar para esse Pokémon.');
+        clearTimeout(r.timer);
+        const forced = !!m.pendingSwitch;
+        m.pendingSwitch = false;
+        if (!forced) push(`${m.username} chamou ${nameOf(m.mine)} de volta!`);
+        m.mine = target;
+        m.fighters.add(target.id);
+        push(`${m.username} enviou ${nameOf(target)}!`, 'switch', { target: uid, targetMine: mineView(target) });
+        if (!forced) bossRetaliates(r, m, push);
       } else {
-        // O boss revida no atacante
-        const strongEff = effectiveness(bTypes[0], myTypes);
-        const kind = Math.random() < (strongEff > 1 ? 0.7 : strongEff < 1 ? 0.15 : 0.4) ? 'strong' : 'attack';
-        const bmv = getMove(kind, bTypes);
-        if (Math.random() > bmv.acc) push(`${bName} usou ${bmv.name}, mas errou!`);
+        clearTimeout(r.timer);
+        const my = m.mine;
+        const myTypes = SPECIES[my.species_id].types;
+        const mv = getMove(type, myTypes);
+        let reached = false;
+        let line;
+        if (Math.random() > mv.acc) line = `${m.username}: ${nameOf(my)} usou ${mv.name}, mas errou!`;
         else {
-          const h = calcHit(r.level, bmv, r.atk, my.defense, bTypes, myTypes);
-          const dmg = h.dmg === 0 ? 0 : Math.max(1, Math.floor(h.dmg * DMG_MULT));
-          my.current_hp = Math.max(0, my.current_hp - dmg);
-          push(`${bName} usou ${bmv.name} em ${m.username}!${effText(h.eff)}${h.crit ? ' Acerto crítico!' : ''} (-${dmg})`, null, { target: uid, targetMine: mineView(my) });
+          const h = calcHit(my.level, mv, my.attack, r.def, myTypes, bTypes);
+          r.hp = Math.max(0, r.hp - h.dmg);
+          if (r.hp <= r.threshold) { r.hp = r.threshold; reached = true; }
+          line = `${m.username}: ${nameOf(my)} usou ${mv.name}!${effText(h.eff)}${h.crit ? ' Acerto crítico!' : ''} (-${h.dmg})`;
         }
-        if (my.current_hp <= 0) {
-          push(`${nameOf(my)} de ${m.username} desmaiou!`, null, { target: uid, targetMine: mineView(my) });
-          const next = m.team.find((p) => p.current_hp > 0);
-          if (next) {
-            m.mine = next;
-            m.fighters.add(next.id);
-            push(`${m.username} enviou ${nameOf(next)}!`, null, { target: uid, targetMine: mineView(next) });
-          } else {
-            m.eliminated = true;
-            push(`${m.username} não tem mais Pokémon em condições de lutar!`);
-          }
+        push(line);
+        if (reached) {
+          push(`${bName} está exausto! Agora é hora de capturá-lo!`, 'exhaust');
+          enterCapture(r, push);
+        } else {
+          bossRetaliates(r, m, push);
         }
       }
     } else {
@@ -335,6 +367,12 @@ module.exports = function createRaidSystem(ctx) {
     r.busy = true;
     try { await Promise.all([saveMember(r, m), ...r.pendingSaves.splice(0)]); } finally { r.busy = false; }
     if (r.done || r.turn?.uid !== uid) return; // alguém saiu durante a gravação e a vez já avançou
+    if (m.pendingSwitch) { // o Pokémon caiu: o mesmo jogador escolhe o próximo, sem passar a vez
+      r.turn = { uid, deadline: Date.now() + TURN_MS };
+      clearTimeout(r.timer);
+      r.timer = setTimeout(() => timeout(r, uid), TURN_MS + 500);
+      return emitState(r, log);
+    }
     nextTurn(r, log);
     if (!r.done) emitState(r, log);
   }

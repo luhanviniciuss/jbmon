@@ -122,7 +122,7 @@ const Battle = (() => {
     $('turnInfo').hidden = true;
     $('ballBack').hidden = false;
     document.querySelector('#bActions [data-act=run]').firstChild.textContent = m === 'raid' ? 'Sair' : 'Fugir';
-    document.querySelector('#bActions [data-act=switch]').hidden = m === 'raid'; // na raid a troca é automática
+    document.querySelector('#bActions [data-act=switch]').hidden = false;
     showPicker(false);
     $('bContinue').hidden = true;
     return foe;
@@ -209,6 +209,7 @@ const Battle = (() => {
     const s = d.state;
     raid = s;
     inv = s.you.balls;
+    team = s.you.team || [];
     const foe = resetField('raid');
     foe.src = spriteUrl(s.boss.species_id);
     setFoe(s.boss);
@@ -229,13 +230,14 @@ const Battle = (() => {
     const who = raid.members.find((m) => m.id === raid.turn.uid);
     el.hidden = false;
     el.classList.toggle('mine', mine);
-    el.textContent = mine ? `Sua vez! ${left}s${raid.phase === 'capture' ? ' — lance uma Pokébola!' : ''}` : `Vez de ${who ? who.username : '…'} · ${left}s`;
+    el.textContent = mine && raid.turn.forced ? `Escolha o próximo Pokémon! ${left}s` : mine ? `Sua vez! ${left}s${raid.phase === 'capture' ? ' — lance uma Pokébola!' : ''}` : `Vez de ${who ? who.username : '…'} · ${left}s`;
   }
 
   // Aplica o estado final da raid: quem age agora e quais botões ficam ativos
   function applyRaid(s) {
     raid = s;
     inv = s.you.balls;
+    team = s.you.team || team;
     turnEnds = s.turn ? Date.now() + s.turn.left : 0;
     setMine(s.you.mine);
     setBar('foeHp', s.boss.hp, s.boss.maxHp);
@@ -243,10 +245,11 @@ const Battle = (() => {
     const myTurn = !!s.turn && s.turn.uid === MY_ID;
     const fight = s.phase === 'fight';
     locked = !myTurn;
-    document.querySelectorAll('#bActions .act').forEach((b) => (b.disabled = !myTurn || !fight || b.dataset.act === 'ballmenu'));
+    const forced = myTurn && fight && !!s.turn.forced; // o Pokémon da vez desmaiou: escolha obrigatória
+    document.querySelectorAll('#bActions .act').forEach((b) => (b.disabled = !myTurn || !fight || forced || b.dataset.act === 'ballmenu' || (b.dataset.act === 'switch' && !canSwitch())));
     const capture = myTurn && !fight; // fase de captura: só Pokébolas (uma rodada por membro)
     $('ballBack').hidden = true;
-    showPicker(capture);
+    if (forced) { locked = false; openSwitch(true); } else showPicker(capture);
     refreshBalls();
     tickTurn();
   }

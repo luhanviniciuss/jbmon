@@ -59,6 +59,13 @@ curl -s localhost:3000/healthz          # {"ok":true,...}
 ```
 Na primeira subida o `npm start` cria as tabelas no banco (`prisma db push`).
 
+### Sem domínio? Acesse pela porta direta
+Se ainda não tem domínio, pule o passo 4 e libere a porta do jogo (a do `PORT` do `.env`; para usar outra, troque no `.env`, ex.: `PORT=3010`, e reinicie):
+```bash
+sudo ufw allow 3010/tcp
+```
+Acesse por `http://SEU_IP:3010`. Funciona (incluindo WebSocket), mas **sem HTTPS** as senhas trafegam sem criptografia; ponha um domínio + Caddy assim que puder.
+
 ## 4. HTTPS com Caddy
 ```bash
 sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
@@ -103,12 +110,23 @@ como o boss ativo, recomeça; a agenda de 3 h em 3 h do boss é guardada no banc
   ```
 
 ## 7. Levar seu banco local (contas atuais) para o VPS
-No seu computador, com o servidor local **parado**, copie `prisma/dev.db` e envie:
-```bash
-scp prisma/dev.db usuario@IP:/tmp/jbmon.db
+**Não coloque o banco no git**: ele guarda os nomes e os hashes das senhas dos jogadores (e o repositório é público).
+Envie direto por SSH. Uma cópia consistente do banco atual fica em `prisma\backups\jbmon-para-vps.db` (ou use o backup mais recente
+de `prisma\backups`). No seu computador (PowerShell):
+```powershell
+scp prisma\backups\jbmon-para-vps.db root@SEU_IP:/tmp/jbmon.db
 ```
-No VPS: `sudo systemctl stop jbmon && sudo cp /tmp/jbmon.db /var/lib/jbmon/jbmon.db && sudo chown jbmon:jbmon /var/lib/jbmon/jbmon.db && sudo systemctl start jbmon`.
-(Pule esta etapa para começar com o mundo limpo.)
+No VPS, **com o serviço parado** (na primeira vez ainda nem existe banco, então faça antes de ligar):
+```bash
+sudo systemctl stop jbmon 2>/dev/null
+sudo mkdir -p /var/lib/jbmon
+sudo cp /tmp/jbmon.db /var/lib/jbmon/jbmon.db
+sudo rm -f /var/lib/jbmon/jbmon.db-wal /var/lib/jbmon/jbmon.db-shm /tmp/jbmon.db
+sudo chown jbmon:jbmon /var/lib/jbmon/jbmon.db && sudo chmod 600 /var/lib/jbmon/jbmon.db
+sudo systemctl start jbmon
+```
+Faça isso **uma única vez**: depois o banco vivo é o de `/var/lib/jbmon`; copiar de novo por cima apaga o progresso dos jogadores.
+Entre com uma conta antiga para confirmar. Pule esta etapa para começar com o mundo limpo.
 
 ## Manutenção do dia a dia
 | Preciso de… | Comando |

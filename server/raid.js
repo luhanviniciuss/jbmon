@@ -2,10 +2,10 @@
 // Fluxo: boss aparece no mapa -> jogadores formam grupo (2-4) -> encostam no boss -> raid por turnos:
 //   Fase 1 (luta): cada membro age na sua vez; o boss revida no atacante. Ao chegar em 15% de HP ele fica exausto.
 //   Fase 2 (captura): o boss segue com vida; cada membro tem UMA rodada para lançar uma Pokébola.
-const { SPECIES, RARITY, calcStats, effectiveness } = require('../public/species.js');
+const { SPECIES, RARITY, BOSS_TABLE, calcStats, effectiveness } = require('../public/species.js');
 const { BALLS } = require('../public/items.js');
 const { durable } = require('./durable.js');
-const { rand, mineView, nameOf, getMove, calcHit, effText, catchChance, gainExp } = require('./battle.js');
+const { rand, pickSpecies, mineView, nameOf, getMove, calcHit, effText, catchChance, awardExp, XP_RATE } = require('./battle.js');
 
 const envNum = (k, d) => (process.env[k] !== undefined && process.env[k] !== '' ? Number(process.env[k]) : d);
 const CFG = {
@@ -13,7 +13,7 @@ const CFG = {
   first: envNum('BOSS_FIRST_DELAY_MIN', 2) * 60000, // primeiro boss logo após ligar o servidor
   life: envNum('BOSS_LIFETIME_MIN', 30) * 60000, // quanto tempo espera por desafiantes
 };
-const BOSSES = [144, 145, 146, 150, 151];
+const BOSS_LEVEL = 100; // todo lendário é nível 100 (o máximo): é preciso treinar bastante antes
 const MAX_GROUP = 4;
 const TURN_MS = 25000;
 const EXHAUST = 0.15; // o boss fica com 15% de HP na fase de captura
@@ -101,9 +101,9 @@ module.exports = function createRaidSystem(ctx) {
       const d = Math.hypot(tx - 50, ty - 50), t = MAP[ty][tx];
       if ((t === 0 || t === 4) && d >= 18 && d <= 38 && !clearing(tx, ty)) break;
     }
-    const species_id = BOSSES[rand(0, BOSSES.length - 1)];
+    const species_id = pickSpecies(BOSS_TABLE);
     boss = { species_id, tx, ty, x: tx * 32 + 16, y: ty * 32 + 16, expiresAt: Date.now() + CFG.life, busy: false };
-    io.emit('notice', { msg: `✦ ${bossName(species_id)} lendário apareceu! Forme um grupo (G) e enfrente-o!`, big: true });
+    io.emit('notice', { msg: `✦ ${bossName(species_id)} lendário (Lv.${BOSS_LEVEL}) apareceu! Treine sua equipe, forme um grupo (G) e enfrente-o!`, big: true });
     emitBoss();
     console.log(`Boss: ${bossName(species_id)} em (${tx},${ty})`);
   }
@@ -166,7 +166,7 @@ module.exports = function createRaidSystem(ctx) {
         const mine = team.find((p) => p.current_hp > 0);
         const user = await prisma.user.findUnique({ where: { id } });
         if (!mine || !meByUser.get(id)) { setBusy(id, false); continue; }
-        members.push({ uid: id, username: meByUser.get(id).username, team, mine, inv: invOf(user), eliminated: false, left: false, drops: null, persisted: false });
+        members.push({ uid: id, username: meByUser.get(id).username, team, mine, fighters: new Set([mine.id]), inv: invOf(user), eliminated: false, left: false, drops: null, persisted: false });
       }
       if (members.length < 2) {
         members.forEach((m) => setBusy(m.uid, false));
@@ -174,8 +174,9 @@ module.exports = function createRaidSystem(ctx) {
         emitBoss();
         return hint('Membros do grupo precisam ter Pokémon saudáveis.');
       }
+      const level = BOSS_LEVEL;
       const avg = Math.round(members.reduce((s, m) => s + m.mine.level, 0) / members.length);
-      const level = Math.max(20, Math.min(60, avg + 4));
+      if (avg < 60) members.forEach((m) => notice(m.uid, `⚠ ${bossName(boss.species_id)} é Lv.${level} e a média do grupo é Lv.${avg}. Vai ser MUITO difícil!`));
       const st = calcStats(boss.species_id, level);
       const r = {
         id: nextRid++, boss, members, level, atk: st.attack, def: st.defense, stats: st,
@@ -234,14 +235,16 @@ module.exports = function createRaidSystem(ctx) {
   function enterCapture(r, push) {
     r.phase = 'capture';
     const b = SPECIES[r.boss.species_id];
-    const exp = Math.floor(((b.exp * r.level) / 5) * RARITY.legendary.expMul * 0.5);
     for (const m of r.members) {
       if (m.left) continue;
-      const before = m.mine.level;
-      let evo = null;
-      gainExp(m.mine, exp, { onEvolve: (from, to) => (evo = SPECIES[to].name) });
+      // EXP de um lendário Lv.100: enorme para quem está bem abaixo dele (por isso vale treinar e voltar)
+      const base = (p) => Math.max(1, Math.floor(((b.exp * r.level) / 5) * RARITY.legendary.expMul * Math.max(0.3, Math.min(2.5, r.level / p.level)) * XP_RATE));
+      const res = awardExp(m.team, m.fighters, base);
+      const main = res.find((x) => x.mon === m.mine) || res[0];
+      const others = res.filter((x) => x !== main && x.toLevel > x.fromLevel).length;
+      const evo = main.evolved.length ? ` e evoluiu para ${SPECIES[main.evolved[main.evolved.length - 1].to].name}!` : '';
       m.drops = { apricorns: rand(10, 20), shards: rand(6, 10) };
-      push(`${m.username}: ${nameOf(m.mine)} +${exp} EXP${m.mine.level > before ? ` (Lv.${before}→${m.mine.level})` : ''}${evo ? ` e evoluiu para ${evo}!` : ''}`, m.mine.level > before ? 'levelup' : null);
+      push(`${m.username}: ${nameOf(main.mon)} +${main.amount} EXP${main.toLevel > main.fromLevel ? ` (Lv.${main.fromLevel}→${main.toLevel})` : ''}${evo}${others ? ` · ${others} da equipe também subiu${others > 1 ? 'ram' : ''} de nível` : ''}`, main.toLevel > main.fromLevel ? 'levelup' : null);
     }
     r.capQueue = r.members.filter((m) => !m.left).map((m) => m.uid);
     r.pendingSaves = r.members.filter((m) => !m.left).map((m) => saveMember(r, m)); // EXP/evolução e materiais já ficam no banco
@@ -293,6 +296,7 @@ module.exports = function createRaidSystem(ctx) {
           const next = m.team.find((p) => p.current_hp > 0);
           if (next) {
             m.mine = next;
+            m.fighters.add(next.id);
             push(`${m.username} enviou ${nameOf(next)}!`, null, { target: uid, targetMine: mineView(next) });
           } else {
             m.eliminated = true;

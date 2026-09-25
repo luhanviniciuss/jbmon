@@ -43,6 +43,69 @@ const SPECIES = {
   144: S('Articuno', 'ice/flying', 90, 85, 100, 0.05, 290, 'legendary'), 145: S('Zapdos', 'electric/flying', 90, 90, 85, 0.05, 290, 'legendary'), 146: S('Moltres', 'fire/flying', 90, 100, 90, 0.05, 290, 'legendary'),
   147: S('Dratini', 'dragon', 41, 64, 45, 0.25, 60, 'epic'),
   150: S('Mewtwo', 'psychic', 106, 110, 90, 0.03, 340, 'legendary'), 151: S('Mew', 'psychic', 100, 100, 100, 0.05, 270, 'legendary'),
+
+  // ----- Mais Pokémon (Gen 1) -----
+  21: S('Spearow', 'normal/flying', 40, 60, 30, 0.85, 52), 22: S('Fearow', 'normal/flying', 65, 90, 65, 0.45, 155, 'uncommon'),
+  23: S('Ekans', 'poison', 35, 60, 44, 0.85, 58), 24: S('Arbok', 'poison', 60, 95, 69, 0.4, 157, 'uncommon'),
+  46: S('Paras', 'bug/grass', 35, 70, 55, 0.85, 57), 47: S('Parasect', 'bug/grass', 60, 95, 80, 0.4, 142, 'uncommon'),
+  48: S('Venonat', 'bug/poison', 60, 55, 50, 0.85, 61), 49: S('Venomoth', 'bug/poison', 70, 65, 60, 0.4, 158, 'uncommon'),
+  50: S('Diglett', 'ground', 10, 55, 25, 0.85, 53), 51: S('Dugtrio', 'ground', 35, 100, 50, 0.4, 149, 'uncommon'),
+  81: S('Magnemite', 'electric/steel', 25, 35, 70, 0.6, 65, 'uncommon'), 82: S('Magneton', 'electric/steel', 50, 60, 95, 0.3, 163, 'rare'),
+  83: S("Farfetch'd", 'normal/flying', 52, 90, 55, 0.45, 132, 'rare'),
+  84: S('Doduo', 'normal/flying', 35, 85, 45, 0.85, 62), 85: S('Dodrio', 'normal/flying', 60, 110, 70, 0.4, 165, 'uncommon'),
+  86: S('Seel', 'water', 65, 45, 55, 0.7, 65, 'uncommon'), 87: S('Dewgong', 'water/ice', 90, 70, 80, 0.3, 166, 'rare'),
+  88: S('Grimer', 'poison', 80, 80, 50, 0.7, 65, 'uncommon'), 89: S('Muk', 'poison', 105, 105, 75, 0.3, 175, 'rare'),
+  92: S('Gastly', 'ghost/poison', 30, 35, 30, 0.65, 62, 'uncommon'), 93: S('Haunter', 'ghost/poison', 45, 50, 45, 0.4, 142, 'rare'), 94: S('Gengar', 'ghost/poison', 60, 65, 60, 0.2, 225, 'epic'),
+  95: S('Onix', 'rock/ground', 35, 45, 160, 0.6, 77, 'uncommon'), 208: S('Steelix', 'steel/ground', 75, 85, 200, 0.2, 179, 'epic'),
+  96: S('Drowzee', 'psychic', 60, 48, 45, 0.85, 66), 97: S('Hypno', 'psychic', 85, 73, 70, 0.4, 169, 'uncommon'),
+  100: S('Voltorb', 'electric', 40, 30, 50, 0.7, 66, 'uncommon'), 101: S('Electrode', 'electric', 60, 50, 70, 0.3, 172, 'rare'),
+  102: S('Exeggcute', 'grass/psychic', 60, 40, 80, 0.7, 65, 'uncommon'), 103: S('Exeggutor', 'grass/psychic', 95, 95, 85, 0.3, 186, 'rare'),
+  104: S('Cubone', 'ground', 50, 50, 95, 0.7, 64, 'uncommon'), 105: S('Marowak', 'ground', 60, 80, 110, 0.3, 149, 'rare'),
+  106: S('Hitmonlee', 'fighting', 50, 120, 53, 0.35, 159, 'rare'), 107: S('Hitmonchan', 'fighting', 50, 105, 79, 0.35, 159, 'rare'),
+  108: S('Lickitung', 'normal', 90, 55, 75, 0.55, 77, 'uncommon'),
+  109: S('Koffing', 'poison', 40, 65, 95, 0.85, 68), 110: S('Weezing', 'poison', 65, 90, 120, 0.4, 172, 'uncommon'),
+  111: S('Rhyhorn', 'ground/rock', 80, 85, 95, 0.6, 69, 'uncommon'), 112: S('Rhydon', 'ground/rock', 105, 130, 120, 0.25, 170, 'rare'),
+  113: S('Chansey', 'normal', 250, 5, 5, 0.3, 395, 'epic'),
+  114: S('Tangela', 'grass', 65, 55, 115, 0.6, 87, 'uncommon'),
+  115: S('Kangaskhan', 'normal', 105, 95, 80, 0.3, 175, 'rare'),
+  122: S('Mr. Mime', 'psychic', 40, 45, 65, 0.45, 161, 'rare'),
+  123: S('Scyther', 'bug/flying', 70, 110, 80, 0.3, 100, 'rare'), 212: S('Scizor', 'bug/steel', 70, 130, 100, 0.15, 175, 'epic'),
+  124: S('Jynx', 'ice/psychic', 65, 50, 35, 0.45, 159, 'rare'),
+  125: S('Electabuzz', 'electric', 65, 83, 57, 0.3, 172, 'rare'),
+  126: S('Magmar', 'fire', 65, 95, 57, 0.3, 173, 'rare'),
+  127: S('Pinsir', 'bug', 65, 125, 100, 0.3, 175, 'rare'),
+  128: S('Tauros', 'normal', 75, 100, 95, 0.3, 172, 'rare'),
+  132: S('Ditto', 'normal', 48, 48, 48, 0.35, 101, 'rare'),
+  137: S('Porygon', 'normal', 65, 60, 70, 0.4, 79, 'rare'),
+  138: S('Omanyte', 'rock/water', 35, 40, 100, 0.45, 71, 'rare'), 139: S('Omastar', 'rock/water', 70, 60, 125, 0.2, 173, 'epic'),
+  140: S('Kabuto', 'rock/water', 30, 80, 90, 0.45, 71, 'rare'), 141: S('Kabutops', 'rock/water', 60, 115, 105, 0.2, 173, 'epic'),
+  142: S('Aerodactyl', 'rock/flying', 80, 105, 65, 0.2, 180, 'epic'),
+  148: S('Dragonair', 'dragon', 61, 84, 65, 0.2, 147, 'epic'), 149: S('Dragonite', 'dragon/flying', 91, 134, 95, 0.1, 270, 'epic'),
+
+  // ----- Mais Pokémon (Gen 2/3) -----
+  179: S('Mareep', 'electric', 55, 40, 40, 0.75, 56, 'uncommon'), 180: S('Flaaffy', 'electric', 70, 55, 55, 0.4, 128, 'rare'), 181: S('Ampharos', 'electric', 90, 75, 85, 0.2, 230, 'epic'),
+  196: S('Espeon', 'psychic', 65, 65, 60, 0.2, 184, 'epic'), 197: S('Umbreon', 'dark', 95, 65, 110, 0.2, 184, 'epic'),
+  215: S('Sneasel', 'dark/ice', 55, 95, 55, 0.45, 132, 'rare'),
+  227: S('Skarmory', 'steel/flying', 65, 80, 140, 0.25, 163, 'epic'),
+  228: S('Houndour', 'dark/fire', 45, 60, 30, 0.6, 66, 'uncommon'), 229: S('Houndoom', 'dark/fire', 75, 90, 50, 0.3, 175, 'rare'),
+  246: S('Larvitar', 'rock/ground', 50, 64, 50, 0.4, 60, 'rare'), 247: S('Pupitar', 'rock/ground', 70, 84, 70, 0.25, 144, 'epic'), 248: S('Tyranitar', 'rock/dark', 100, 134, 110, 0.1, 270, 'epic'),
+  359: S('Absol', 'dark', 65, 130, 60, 0.25, 174, 'epic'),
+
+  // ----- Mais lendários -----
+  243: S('Raikou', 'electric', 90, 85, 75, 0.04, 290, 'legendary'), 244: S('Entei', 'fire', 115, 115, 85, 0.04, 290, 'legendary'), 245: S('Suicune', 'water', 100, 75, 115, 0.04, 290, 'legendary'),
+  249: S('Lugia', 'psychic/flying', 106, 90, 130, 0.03, 340, 'legendary'), 250: S('Ho-Oh', 'fire/flying', 106, 130, 90, 0.03, 340, 'legendary'), 251: S('Celebi', 'psychic/grass', 100, 100, 100, 0.05, 300, 'legendary'),
+  377: S('Regirock', 'rock', 80, 100, 200, 0.04, 290, 'legendary'), 378: S('Regice', 'ice', 80, 50, 100, 0.04, 290, 'legendary'), 379: S('Registeel', 'steel', 80, 75, 150, 0.04, 290, 'legendary'),
+  380: S('Latias', 'dragon/psychic', 80, 80, 90, 0.04, 300, 'legendary'), 381: S('Latios', 'dragon/psychic', 80, 90, 80, 0.04, 300, 'legendary'),
+  382: S('Kyogre', 'water', 100, 100, 90, 0.03, 340, 'legendary'), 383: S('Groudon', 'ground', 100, 150, 140, 0.03, 340, 'legendary'), 384: S('Rayquaza', 'dragon/flying', 105, 150, 90, 0.03, 340, 'legendary'),
+  385: S('Jirachi', 'steel/psychic', 100, 100, 100, 0.04, 300, 'legendary'), 386: S('Deoxys', 'psychic', 50, 150, 50, 0.03, 340, 'legendary'),
+
+  // ----- Pokémon bebê (pré-evoluções) -----
+  172: S('Pichu', 'electric', 20, 40, 15, 0.85, 41, 'uncommon'),
+  173: S('Cleffa', 'normal', 50, 25, 28, 0.85, 44, 'uncommon'),
+  174: S('Igglybuff', 'normal', 90, 30, 15, 0.85, 42, 'uncommon'),
+  238: S('Smoochum', 'ice/psychic', 45, 30, 15, 0.6, 61, 'rare'),
+  239: S('Elekid', 'electric', 45, 63, 37, 0.6, 72, 'rare'),
+  240: S('Magby', 'fire', 45, 75, 37, 0.6, 73, 'rare'),
 };
 
 const RARITY = {
@@ -60,25 +123,28 @@ const TYPES = {
   fighting: { label: 'Lutador', color: '#c03028' }, poison: { label: 'Veneno', color: '#a040a0' }, ground: { label: 'Terra', color: '#c9a84c' },
   flying: { label: 'Voador', color: '#a890f0' }, psychic: { label: 'Psíquico', color: '#f85888' }, bug: { label: 'Inseto', color: '#a8b820' },
   rock: { label: 'Pedra', color: '#b8a038' }, ghost: { label: 'Fantasma', color: '#705898' }, dragon: { label: 'Dragão', color: '#7038f8' },
+  dark: { label: 'Sombrio', color: '#705848' }, steel: { label: 'Aço', color: '#9aa0bd' },
 };
 
 // Tabela de efetividade: atacante -> defensor -> multiplicador (o que não está listado é ×1)
 const CHART = {
-  normal: { rock: 0.5, ghost: 0 },
-  fire: { fire: 0.5, water: 0.5, grass: 2, ice: 2, bug: 2, rock: 0.5, dragon: 0.5 },
+  normal: { rock: 0.5, steel: 0.5, ghost: 0 },
+  fire: { fire: 0.5, water: 0.5, grass: 2, ice: 2, bug: 2, rock: 0.5, dragon: 0.5, steel: 2 },
   water: { fire: 2, water: 0.5, grass: 0.5, ground: 2, rock: 2, dragon: 0.5 },
   electric: { water: 2, electric: 0.5, grass: 0.5, ground: 0, flying: 2, dragon: 0.5 },
-  grass: { fire: 0.5, water: 2, grass: 0.5, poison: 0.5, ground: 2, flying: 0.5, bug: 0.5, rock: 2, dragon: 0.5 },
-  ice: { fire: 0.5, water: 0.5, grass: 2, ice: 0.5, ground: 2, flying: 2, dragon: 2 },
-  fighting: { normal: 2, ice: 2, poison: 0.5, flying: 0.5, psychic: 0.5, bug: 0.5, rock: 2, ghost: 0 },
-  poison: { grass: 2, poison: 0.5, ground: 0.5, rock: 0.5, ghost: 0.5 },
-  ground: { fire: 2, electric: 2, grass: 0.5, poison: 2, flying: 0, bug: 0.5, rock: 2 },
-  flying: { electric: 0.5, grass: 2, fighting: 2, bug: 2, rock: 0.5 },
-  psychic: { fighting: 2, poison: 2, psychic: 0.5 },
-  bug: { fire: 0.5, grass: 2, fighting: 0.5, poison: 2, flying: 0.5, psychic: 2, ghost: 0.5 },
-  rock: { fire: 2, ice: 2, fighting: 0.5, ground: 0.5, flying: 2, bug: 2 },
-  ghost: { normal: 0, psychic: 2, ghost: 2 },
-  dragon: { dragon: 2 },
+  grass: { fire: 0.5, water: 2, grass: 0.5, poison: 0.5, ground: 2, flying: 0.5, bug: 0.5, rock: 2, dragon: 0.5, steel: 0.5 },
+  ice: { fire: 0.5, water: 0.5, grass: 2, ice: 0.5, ground: 2, flying: 2, dragon: 2, steel: 0.5 },
+  fighting: { normal: 2, ice: 2, poison: 0.5, flying: 0.5, psychic: 0.5, bug: 0.5, rock: 2, ghost: 0, dark: 2, steel: 2 },
+  poison: { grass: 2, poison: 0.5, ground: 0.5, rock: 0.5, ghost: 0.5, steel: 0 },
+  ground: { fire: 2, electric: 2, grass: 0.5, poison: 2, flying: 0, bug: 0.5, rock: 2, steel: 2 },
+  flying: { electric: 0.5, grass: 2, fighting: 2, bug: 2, rock: 0.5, steel: 0.5 },
+  psychic: { fighting: 2, poison: 2, psychic: 0.5, dark: 0, steel: 0.5 },
+  bug: { fire: 0.5, grass: 2, fighting: 0.5, poison: 2, flying: 0.5, psychic: 2, ghost: 0.5, dark: 2, steel: 0.5 },
+  rock: { fire: 2, ice: 2, fighting: 0.5, ground: 0.5, flying: 2, bug: 2, steel: 0.5 },
+  ghost: { normal: 0, psychic: 2, ghost: 2, dark: 0.5 },
+  dragon: { dragon: 2, steel: 0.5 },
+  dark: { fighting: 0.5, psychic: 2, ghost: 2, dark: 0.5 },
+  steel: { fire: 0.5, water: 0.5, electric: 0.5, ice: 2, rock: 2, steel: 0.5 },
 };
 
 // Golpe assinatura (o 2º ataque usa o tipo principal do Pokémon; o 1º é sempre Normal)
@@ -86,6 +152,7 @@ const MOVE_NAMES = {
   normal: 'Golpe Forte', fire: 'Lança-chamas', water: "Jato d'Água", grass: 'Chicote de Vinha', electric: 'Choque do Trovão',
   ice: 'Raio de Gelo', fighting: 'Golpe Karatê', poison: 'Ácido', ground: 'Terremoto', flying: 'Ataque de Asa',
   psychic: 'Psíquico', bug: 'Picada', rock: 'Pedrada', ghost: 'Lambida', dragon: 'Ira do Dragão',
+  dark: 'Mordida Sombria', steel: 'Garra de Metal',
 };
 
 const effectiveness = (atkType, defTypes) => defTypes.reduce((m, t) => m * (CHART[atkType]?.[t] ?? 1), 1);
@@ -94,26 +161,48 @@ const effectiveness = (atkType, defTypes) => defTypes.reduce((m, t) => m * (CHAR
 const EVOLUTIONS = {
   1: [16, 2], 2: [32, 3], 4: [16, 5], 5: [36, 6], 7: [16, 8], 8: [36, 9],
   10: [7, 11], 11: [10, 12], 13: [7, 14], 14: [10, 15], 16: [18, 17], 17: [36, 18], 19: [20, 20],
-  25: [30, 26], 27: [22, 28], 29: [16, 30], 30: [36, 31], 32: [16, 33], 33: [36, 34],
+  25: [32, 26], 27: [22, 28], 29: [16, 30], 30: [36, 31], 32: [16, 33], 33: [36, 34],
   35: [30, 36], 37: [30, 38], 39: [30, 40], 41: [22, 42], 43: [21, 44], 44: [36, 45],
   52: [28, 53], 54: [33, 55], 56: [28, 57], 58: [36, 59], 60: [25, 61], 61: [36, 62], 63: [16, 64], 64: [36, 65],
   66: [28, 67], 67: [36, 68], 69: [21, 70], 70: [36, 71], 72: [30, 73], 74: [25, 75], 75: [38, 76],
   77: [40, 78], 79: [37, 80], 90: [36, 91], 98: [28, 99], 116: [32, 117], 118: [33, 119], 120: [36, 121],
-  129: [20, 130], 133: [30, [134, 135, 136]],
+  129: [20, 130], 133: [30, [134, 135, 136, 196, 197]],
+  21: [20, 22], 23: [22, 24], 46: [24, 47], 48: [31, 49], 50: [26, 51], 81: [30, 82], 84: [31, 85], 86: [34, 87], 88: [38, 89],
+  92: [25, 93], 93: [38, 94], 95: [40, 208], 96: [26, 97], 100: [30, 101], 102: [30, 103], 104: [28, 105], 109: [35, 110],
+  111: [42, 112], 123: [40, 212], 138: [40, 139], 140: [40, 141], 147: [30, 148], 148: [55, 149],
+  179: [15, 180], 180: [30, 181], 228: [24, 229], 246: [30, 247], 247: [55, 248],
+  172: [16, 25], 173: [15, 35], 174: [12, 39], 238: [30, 124], 239: [30, 125], 240: [30, 126],
 };
 
 // Tabelas de encontro: [species_id, peso]. Terra: na grama alta. Água: nas margens dos lagos.
 const WILD_TABLE = [
+  // comuns
   [10, 14], [13, 14], [16, 14], [19, 14], [41, 12], [43, 12], [69, 10], [52, 9],
+  [21, 12], [23, 10], [46, 9], [48, 9], [50, 10], [84, 9], [96, 8], [109, 8],
+  // incomuns
   [27, 5], [29, 5], [32, 5], [74, 5], [56, 4], [66, 4], [39, 4], [37, 3.5], [35, 3.5], [63, 3.5],
-  [25, 2], [58, 2], [77, 2],
-  [133, 0.8], [147, 0.8], [143, 0.6],
-  [144, 0.15], [145, 0.15], [146, 0.15], [150, 0.05], [151, 0.08],
+  [81, 4], [88, 4], [92, 4], [95, 4], [100, 4], [102, 4], [104, 4], [108, 3.5], [111, 4], [114, 4], [179, 4], [228, 3.5],
+  // raros
+  [25, 2], [58, 2], [77, 2], [172, 3], [173, 3], [174, 3], [238, 1.2], [239, 1.2], [240, 1.2],
+  [106, 1.8], [107, 1.8], [115, 1.5], [122, 1.5], [123, 1.6], [124, 1.5], [125, 1.5], [126, 1.5], [127, 1.6], [128, 1.8],
+  [132, 1.2], [83, 1.5], [137, 1.2], [215, 1.5], [246, 1.2],
+  // épicos
+  [133, 0.8], [147, 0.8], [143, 0.6], [113, 0.5], [142, 0.5], [227, 0.5], [359, 0.5],
+  // lendários (só longe do centro, um de cada por vez). Os demais lendários surgem apenas como boss.
+  [144, 0.15], [145, 0.15], [146, 0.15], [150, 0.05], [151, 0.08], [243, 0.1], [244, 0.1], [377, 0.08], [378, 0.08], [379, 0.08],
 ];
 const WATER_TABLE = [
   [118, 14], [60, 14], [72, 12], [129, 10],
-  [54, 6], [98, 6], [116, 6], [120, 6], [90, 5], [79, 5],
-  [131, 0.7],
+  [54, 6], [98, 6], [116, 6], [120, 6], [90, 5], [79, 5], [86, 5],
+  [138, 1], [140, 1], [131, 0.7],
+  [245, 0.08],
+];
+// Lendários que aparecem como boss a cada 3 h: [species_id, peso]
+const BOSS_TABLE = [
+  [144, 3], [145, 3], [146, 3], [243, 3], [244, 3], [245, 3],
+  [150, 2], [151, 2], [251, 2], [377, 2], [378, 2], [379, 2],
+  [249, 1.5], [250, 1.5], [380, 1.5], [381, 1.5], [385, 1.5],
+  [382, 1], [383, 1], [384, 1], [386, 1],
 ];
 
 function calcStats(id, level) {
@@ -125,6 +214,16 @@ function calcStats(id, level) {
   };
 }
 
+// EXP necessário para ir de `level` para `level + 1` (cresce de forma suave até o nível 100)
+const MAX_LEVEL = 100;
+const expToNext = (level) => Math.floor(0.9 * level * level + 12 * level + 20);
+
+// Nível mínimo em que uma espécie pode existir na natureza: uma forma evoluída nunca é mais fraca do que o
+// nível em que a anterior evolui (Pikachu >= 16 porque Pichu evolui no 16; Raichu >= 32; Charizard >= 36...).
+const MIN_LEVEL = {};
+for (const [, [lv, to]] of Object.entries(EVOLUTIONS)) [].concat(to).forEach((t) => { MIN_LEVEL[t] = Math.max(MIN_LEVEL[t] || 1, lv); });
+const minLevel = (id) => MIN_LEVEL[id] || 1;
+
 // Retorna o id da evolução se a espécie evolui neste nível, senão null
 function evolveTarget(id, level) {
   const e = EVOLUTIONS[id];
@@ -133,5 +232,5 @@ function evolveTarget(id, level) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { SPECIES, RARITY, TYPES, CHART, MOVE_NAMES, EVOLUTIONS, WILD_TABLE, WATER_TABLE, calcStats, evolveTarget, effectiveness };
+  module.exports = { SPECIES, RARITY, TYPES, CHART, MOVE_NAMES, EVOLUTIONS, WILD_TABLE, WATER_TABLE, BOSS_TABLE, MAX_LEVEL, expToNext, minLevel, calcStats, evolveTarget, effectiveness };
 }

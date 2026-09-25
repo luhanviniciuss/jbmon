@@ -16,8 +16,7 @@ const setBalls = (inv) => {
   $('balls').parentElement.title = Object.entries(INV).map(([k, n]) => BALLS[k].name + ': ' + n).join(' · ');
 };
 
-const GEN1 = 'bulbasaur ivysaur venusaur charmander charmeleon charizard squirtle wartortle blastoise caterpie metapod butterfree weedle kakuna beedrill pidgey pidgeotto pidgeot rattata raticate spearow fearow ekans arbok pikachu raichu sandshrew sandslash nidoran-f nidorina nidoqueen nidoran-m nidorino nidoking clefairy clefable vulpix ninetales jigglypuff wigglytuff zubat golbat oddish gloom vileplume paras parasect venonat venomoth diglett dugtrio meowth persian psyduck golduck mankey primeape growlithe arcanine poliwag poliwhirl poliwrath abra kadabra alakazam machop machoke machamp bellsprout weepinbell victreebel tentacool tentacruel geodude graveler golem ponyta rapidash slowpoke slowbro magnemite magneton farfetchd doduo dodrio seel dewgong grimer muk shellder cloyster gastly haunter gengar onix drowzee hypno krabby kingler voltorb electrode exeggcute exeggutor cubone marowak hitmonlee hitmonchan lickitung koffing weezing rhyhorn rhydon chansey tangela kangaskhan horsea seadra goldeen seaking staryu starmie mr-mime scyther jynx electabuzz magmar pinsir tauros magikarp gyarados lapras ditto eevee vaporeon jolteon flareon porygon omanyte omastar kabuto kabutops aerodactyl snorlax articuno zapdos moltres dratini dragonair dragonite mewtwo mew'.split(' ');
-const speciesName = (id) => GEN1[id - 1] || `#${id}`;
+const speciesName = (id) => SPECIES[id]?.name || `#${id}`;
 const spriteUrl = (id) => `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`;
 
 // ---------- Utilidades de UI ----------
@@ -71,7 +70,7 @@ const monCard = (p, i) => `<div class="mon${p.current_hp <= 0 ? ' fainted' : ''}
   <div class="art"><img src="${spriteUrl(p.species_id)}" alt="" onerror="this.style.opacity=.2" /></div>
   <div><div class="top"><span class="name">${p.nickname || speciesName(p.species_id)}</span><span class="lv">Lv. ${p.level}</span></div>
   <div class="tags"><span class="rar" style="--rc:${rarityOf(p.species_id).color}">${rarityOf(p.species_id).label}</span>${typeChips(p.species_id)}</div>
-  ${statRow('hp', 'HP', p.current_hp, p.hp, p.current_hp + '/' + p.hp)}${statRow('atk', 'ATK', p.attack, 60)}${statRow('def', 'DEF', p.defense, 60)}${statRow('xp', 'EXP', p.current_exp, p.level * 20)}</div></div>`;
+  ${statRow('hp', 'HP', p.current_hp, p.hp, p.current_hp + '/' + p.hp)}${statRow('atk', 'ATK', p.attack, 60)}${statRow('def', 'DEF', p.defense, 60)}${statRow('xp', 'EXP', p.current_exp, expToNext(p.level), p.current_exp + '/' + expToNext(p.level))}</div></div>`;
 
 async function openParty(open = !$('drawer').classList.contains('open')) {
   if (open) { $('bag').classList.remove('open'); $('group').classList.remove('open'); }
@@ -146,7 +145,7 @@ function renderGroup() {
     (GROUP ? '<button class="btn small danger" id="leaveGroup">Sair do grupo</button>' : '') +
     (leader ? '<div class="section-title">Convidar jogador</div><div class="invite-form"><input id="invName" placeholder="Nome do jogador" maxlength="16" /><button class="btn small" id="invSend">Convidar</button></div>' +
       '<div class="section-title">Online agora</div><div id="onlineList" class="chips"><span class="hintline">Carregando…</span></div>' : '') +
-    '<p class="hintline">Lendários aparecem a cada 3 horas. Para enfrentá-los, formem um grupo de 2 a 4 jogadores e encostem no boss juntos. Cada membro age na sua vez; depois que ele ficar exausto, cada um tem uma rodada para lançar uma Pokébola.</p>';
+    '<p class="hintline">Lendários aparecem a cada 3 horas e são todos Lv.100: treine bastante antes. Para enfrentá-los, formem um grupo de 2 a 4 jogadores e encostem no boss juntos. Cada membro age na sua vez; depois que ele ficar exausto, cada um tem uma rodada para lançar uma Pokébola.</p>';
   $('leaveGroup')?.addEventListener('click', () => window.worldScene?.socket.emit('group:leave'));
   const send = (name) => name && window.worldScene?.socket.emit('group:invite', name);
   $('invSend')?.addEventListener('click', () => { send($('invName').value.trim()); $('invName').value = ''; });

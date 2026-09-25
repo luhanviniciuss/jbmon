@@ -1,11 +1,17 @@
-const { SPECIES, RARITY, MOVE_NAMES, WILD_TABLE, calcStats, evolveTarget, effectiveness } = require('../public/species.js');
+const { SPECIES, RARITY, MOVE_NAMES, WILD_TABLE, MAX_LEVEL, expToNext, calcStats, evolveTarget, effectiveness } = require('../public/species.js');
 const { BALLS } = require('../public/items.js');
 
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 
+// ---------- EXP ----------
+const XP_RATE = 1.3; // multiplicador geral de EXP
+const SHARE = 0.35; // fração que os membros da equipe que NÃO lutaram recebem (EXP compartilhado)
+// Fração do EXP cheio por resultado: toda batalha dá EXP, mas a vitória rende mais
+const EXP_MULT = { win: 1, caught: 0.8, lose: 0.3, fled: 0.12 };
+
 const mineView = (p) => ({
   id: p.id, species_id: p.species_id, nickname: p.nickname, level: p.level,
-  hp: p.current_hp, maxHp: p.hp, exp: p.current_exp, expMax: p.level * 20,
+  hp: p.current_hp, maxHp: p.hp, exp: p.current_exp, expMax: expToNext(p.level),
 });
 const wildView = (w) => ({ species_id: w.species_id, level: w.level, hp: w.hp, maxHp: w.maxHp });
 const nameOf = (p) => p.nickname || SPECIES[p.species_id].name;
@@ -54,18 +60,19 @@ function rollDrops(rarity) {
   return { apricorns, shards };
 }
 
-// Recalcula stats ao subir de nível/evoluir, preservando o HP já perdido
+// Recalcula stats ao subir de nível/evoluir, preservando o HP já perdido (quem desmaiou continua desmaiado)
 function applyStats(p) {
   const st = calcStats(p.species_id, p.level);
-  p.current_hp += st.hp - p.hp;
+  if (p.current_hp > 0) p.current_hp += st.hp - p.hp;
   Object.assign(p, { hp: st.hp, attack: st.attack, defense: st.defense });
 }
 
 // Dá EXP, sobe níveis e evolui. Callbacks opcionais para narrar cada evento.
 function gainExp(mon, exp, { onLevel, onEvolve } = {}) {
+  if (mon.level >= MAX_LEVEL) return;
   mon.current_exp += exp;
-  while (mon.current_exp >= mon.level * 20 && mon.level < 100) {
-    mon.current_exp -= mon.level * 20;
+  while (mon.current_exp >= expToNext(mon.level) && mon.level < MAX_LEVEL) {
+    mon.current_exp -= expToNext(mon.level);
     mon.level++;
     applyStats(mon);
     onLevel?.(mon.level);
@@ -77,11 +84,43 @@ function gainExp(mon, exp, { onLevel, onEvolve } = {}) {
       onEvolve?.(from, to);
     }
   }
+  if (mon.level >= MAX_LEVEL) mon.current_exp = 0;
+}
+
+// EXP de derrotar um inimigo: cresce com o nível dele e com a raridade, e é maior quando ele é mais forte que você
+// (e menor quando você já é muito mais forte: treinar em inimigos fracos rende pouco).
+function expValue(foeSpecies, foeLevel, mon) {
+  const sp = SPECIES[foeSpecies];
+  const ratio = Math.max(0.3, Math.min(2.5, foeLevel / mon.level));
+  return Math.max(1, Math.floor(((sp.exp * foeLevel) / 5) * RARITY[sp.rarity].expMul * ratio * XP_RATE));
+}
+
+/**
+ * Distribui EXP pela equipe. `fighterIds` (quem lutou) recebe o valor cheio; os demais, SHARE dele.
+ * `baseOf(mon)` = EXP cheio para aquele Pokémon. `hooks(mon)` pode devolver { onGain, onLevel, onEvolve }.
+ * Retorna [{ mon, amount, fromLevel, toLevel, evolved: [{from, to}], fighter }]
+ */
+function awardExp(team, fighterIds, baseOf, { hooks, onlyFighters = false } = {}) {
+  const out = [];
+  for (const mon of team) {
+    const fighter = fighterIds.has(mon.id);
+    if (onlyFighters && !fighter) continue;
+    const amount = Math.max(1, Math.floor(baseOf(mon) * (fighter ? 1 : SHARE)));
+    const hk = hooks?.(mon);
+    const rec = { mon, amount, fromLevel: mon.level, toLevel: mon.level, evolved: [], fighter };
+    hk?.onGain?.(amount);
+    gainExp(mon, amount, {
+      onLevel: (lvl) => { rec.toLevel = lvl; hk?.onLevel?.(lvl); },
+      onEvolve: (from, to) => { rec.evolved.push({ from, to }); hk?.onEvolve?.(from, to); },
+    });
+    out.push(rec);
+  }
+  return out;
 }
 
 /**
  * Resolve um turno (ação do jogador + resposta do selvagem), mutando o estado `b`:
- * b = { team: [rows Pokemon], mine, wild, inv }
+ * b = { team: [rows Pokemon], mine, wild, inv, participants }
  * Retorna { log, result: null|'win'|'lose'|'caught'|'fled', capture, drops }
  */
 function resolveTurn(b, type) {
@@ -90,10 +129,37 @@ function resolveTurn(b, type) {
   const wname = SPECIES[w.species_id].name;
   const wTypes = SPECIES[w.species_id].types;
   const push = (msg, fx, extra) => log.push({ msg, wildHp: w.hp, mine: mineView(b.mine), fx, ...extra });
+  b.participants ||= new Set(); // quem já lutou nesta batalha (recebe EXP cheio)
+  b.participants.add(b.mine.id);
   let result = null;
   let capture = null;
   const my = b.mine;
   const myTypes = SPECIES[my.species_id].types;
+
+  // Toda batalha rende EXP. Vitória/captura: equipe inteira (quem lutou = cheio, os demais = compartilhado).
+  // Derrota/fuga: só quem lutou, e menos, proporcional ao estrago que causou no inimigo.
+  const giveExp = (res) => {
+    const dealt = 1 - w.hp / w.maxHp;
+    const fightOnly = res === 'lose' || res === 'fled';
+    const scale = EXP_MULT[res] * (fightOnly ? 0.4 + 0.6 * dealt : 1);
+    const why = { win: '', caught: '', lose: ' pela luta', fled: ' pela experiência' }[res];
+    const results = awardExp(
+      b.team, b.participants, (p) => expValue(w.species_id, w.level, p) * scale,
+      {
+        onlyFighters: fightOnly,
+        hooks: (p) => (p === b.mine ? {
+          onGain: (n) => push(`${nameOf(p)} ganhou ${n} EXP${why}.`),
+          onLevel: (lvl) => push(`${nameOf(p)} subiu para o nível ${lvl}!`),
+          onEvolve: (from, to) => push(`${from} evoluiu para ${SPECIES[to].name}!`, 'evolve'),
+        } : undefined),
+      },
+    );
+    const others = results.filter((r) => r.mon !== b.mine);
+    if (others.length) {
+      push(`Equipe: ${others.map((r) => `${nameOf(r.mon)} +${r.amount}${r.toLevel > r.fromLevel ? ` (Lv.${r.fromLevel}→${r.toLevel})` : ''}`).join(', ')}`);
+      others.forEach((r) => r.evolved.forEach((e) => push(`${e.from} evoluiu para ${SPECIES[e.to].name}!`)));
+    }
+  };
 
   if (type === 'attack' || type === 'strong') {
     const mv = getMove(type, myTypes);
@@ -104,14 +170,9 @@ function resolveTurn(b, type) {
       push(`${nameOf(my)} usou ${mv.name}!${effText(h.eff)}${h.crit ? ' Acerto crítico!' : ''} (-${h.dmg})`, null, { eff: h.eff });
     }
     if (w.hp <= 0) {
-      const rarity = SPECIES[w.species_id].rarity;
-      const exp = Math.floor(((SPECIES[w.species_id].exp * w.level) / 5) * RARITY[rarity].expMul);
-      push(`${wname} selvagem foi derrotado! ${nameOf(my)} ganhou ${exp} EXP.`);
-      gainExp(my, exp, {
-        onLevel: (lvl) => push(`${nameOf(my)} subiu para o nível ${lvl}!`),
-        onEvolve: (from, to) => push(`${from} evoluiu para ${SPECIES[to].name}!`, 'evolve'),
-      });
-      const drops = rollDrops(rarity);
+      push(`${wname} selvagem foi derrotado!`);
+      giveExp('win');
+      const drops = rollDrops(SPECIES[w.species_id].rarity);
       push(`Coletou ${drops.apricorns} Bolota(s)${drops.shards ? ` e ${drops.shards} Fragmento(s)` : ''}!`);
       return { log, result: 'win', capture, drops };
     }
@@ -125,6 +186,7 @@ function resolveTurn(b, type) {
       push(`Gotcha! ${wname} foi capturado!`, 'caught');
       const st = calcStats(w.species_id, w.level);
       capture = { species_id: w.species_id, level: w.level, hp: st.hp, attack: st.attack, defense: st.defense, current_hp: Math.max(1, w.hp) };
+      giveExp('caught');
       const drops = rollDrops(SPECIES[w.species_id].rarity);
       push(`Coletou ${drops.apricorns} Bolota(s)${drops.shards ? ` e ${drops.shards} Fragmento(s)` : ''}!`);
       return { log, result: 'caught', capture, drops };
@@ -133,6 +195,7 @@ function resolveTurn(b, type) {
   } else if (type === 'run') {
     if (Math.random() < 0.7) {
       push('Você fugiu com segurança!');
+      giveExp('fled');
       return { log, result: 'fled', capture };
     }
     push('Não conseguiu fugir!');
@@ -153,9 +216,11 @@ function resolveTurn(b, type) {
     const next = b.team.find((p) => p.current_hp > 0);
     if (next) {
       b.mine = next;
+      b.participants.add(next.id);
       push(`Vai, ${nameOf(next)}!`);
     } else {
       push('Você não tem mais Pokémon! Levado ao Centro Pokémon…');
+      giveExp('lose'); // perder também ensina: quem lutou ganha um pouco de EXP
       result = 'lose';
     }
   }
@@ -164,5 +229,5 @@ function resolveTurn(b, type) {
 
 module.exports = {
   rand, pickSpecies, makeWild, resolveTurn, mineView, wildView, nameOf,
-  getMove, calcHit, effText, catchChance, rollDrops, gainExp,
+  getMove, calcHit, effText, catchChance, rollDrops, gainExp, awardExp, expValue, XP_RATE, SHARE,
 };

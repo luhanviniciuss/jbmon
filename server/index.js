@@ -7,7 +7,7 @@ const jwt = require('jsonwebtoken');
 const { Server } = require('socket.io');
 const { PrismaClient } = require('@prisma/client');
 const { MAP_W, TILE, PLAYER_SPEED, CLEAR_MIN, CLEAR_MAX, generateMap } = require('../public/map.js');
-const { SPECIES, WILD_TABLE, WATER_TABLE, calcStats } = require('../public/species.js');
+const { SPECIES, WILD_TABLE, WATER_TABLE, calcStats, minLevel } = require('../public/species.js');
 const { BALLS, RECIPES } = require('../public/items.js');
 const { pickSpecies, makeWild, resolveTurn, mineView, wildView } = require('./battle.js');
 const createRaidSystem = require('./raid.js');
@@ -54,7 +54,9 @@ const grassTiles = [];
 MAP.forEach((row, y) => row.forEach((t, x) => { if (t === 4 && !inClearing(x, y)) grassTiles.push([x, y]); }));
 const wilds = new Map(); // id -> { id, species_id, level, tx, ty, homeX, homeY, x, y, busy }
 let nextWildId = 1;
-const wildLevelAt = (tx, ty) => Math.max(2, Math.min(40, 2 + Math.floor(Math.hypot(tx - 50, ty - 50) / 9) + rand(-1, 2))); // mais forte longe do centro
+// Nível cresce com a distância do Centro: ~5 perto, ~25 no meio do mapa e ~50 nos cantos (dá para treinar até o 70+)
+const wildLevelAt = (tx, ty) => Math.max(2, Math.min(70, Math.round(1 + Math.hypot(tx - 50, ty - 50) * 0.7) + rand(-1, 2)));
+const LEGENDARY_LEVEL = 100; // todos os lendários são nível 100
 const shoreWater = []; // tiles de água encostados em terra: onde os Pokémon aquáticos vivem
 MAP.forEach((row, y) => row.forEach((t, x) => {
   if (t !== 2) return;
@@ -79,7 +81,9 @@ function spawnWild(water = false) {
     if (rarity === 'legendary' ? d >= 40 : Math.random() < 0.4 || d < 30) break; // lendários só longe do centro
   }
   const [tx, ty] = tile;
-  const level = rarity === 'legendary' ? 40 + rand(0, 5) : Math.min(50, wildLevelAt(tx, ty) + LEVEL_BONUS[rarity]);
+  let level = rarity === 'legendary' ? LEGENDARY_LEVEL : Math.min(75, wildLevelAt(tx, ty) + LEVEL_BONUS[rarity]);
+  // Formas evoluídas nunca aparecem abaixo do nível em que a pré-evolução evolui (Pikachu >= 16, Raichu >= 32...)
+  if (level < minLevel(id)) level = minLevel(id) + rand(0, 3);
   const w = { id: nextWildId++, species_id: id, level, water, tx, ty, homeX: tx, homeY: ty, x: tx * TILE + TILE / 2, y: ty * TILE + TILE / 2, busy: false };
   wilds.set(w.id, w);
   return w;

@@ -15,6 +15,8 @@ server/battle.js       Regras de batalha, tipos, dano, captura, EXP
 server/raid.js         Grupos, boss lendário a cada 3 h e raid cooperativa
 server/durable.js      Gravações com retry e fila durável
 server/backup.js       Backup periódico do banco
+deploy/                Arquivos para VPS (systemd e Caddy); veja DEPLOY.md
+scripts/export.js      Exporta contas e Pokémon para JSON (npm run export)
 ```
 
 ## Como rodar (sem instalar banco)
@@ -28,7 +30,7 @@ Abra em duas abas, crie duas contas e **clique/toque no mapa** para andar (segur
 
 Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`, depois `npm run setup`.
 
-**Publicar online (Render):** veja [DEPLOY.md](DEPLOY.md) e o `render.yaml`. Precisa de plano pago com disco persistente e uma única instância.
+**Publicar online (VPS):** veja [DEPLOY.md](DEPLOY.md) (systemd + Caddy com HTTPS automático).
 
 ## Batalhas e encontros
 - **Selvagens no mapa**: ~70 Pokémon vivem na grama alta, visíveis com nome e nível, vagando perto de casa (pontos laranja no minimapa). A batalha começa ao encostar num deles. Quanto mais longe do Centro, mais fortes. Vencer/capturar remove o Pokémon (um novo nasce em 15 s); fugir ou perder o devolve ao mapa, com 4 s de imunidade para você.
@@ -46,7 +48,7 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 - Enquanto está em batalha, o servidor ignora movimentos do jogador.
 
 ## Grupo e Boss lendário (a cada 3 horas)
-- **Boss**: a cada 3 h aparece um lendário (sorteado entre os 21, com os mais poderosos como Rayquaza, Kyogre, Groudon e Deoxys bem mais raros; tabela `BOSS_TABLE`) num ponto do mapa, com aura dourada, estrela no minimapa e aviso para todos. O chip do HUD mostra o tempo restante (clique para ir até ele) ou quanto falta para o próximo. Ele espera 30 min por desafiantes. O primeiro aparece 2 min depois de ligar o servidor.
+- **Boss**: a cada 3 h aparece um lendário (sorteado entre os 21, com os mais poderosos como Rayquaza, Kyogre, Groudon e Deoxys bem mais raros; tabela `BOSS_TABLE`) num ponto do mapa, com aura dourada, estrela no minimapa e aviso para todos. O chip do HUD mostra o tempo restante (clique para ir até ele) ou quanto falta para o próximo. Ele espera 30 min por desafiantes. O primeiro aparece 2 min depois de ligar o servidor; a hora do último boss fica no banco, então o intervalo de 3 h continua valendo mesmo depois de reiniciar (para testar, use `BOSS_INTERVAL_MIN` pequeno).
 - **Grupo (tecla G)**: o líder convida jogadores online pelo nome (2 a 4 membros). Só grupos de 2+ conseguem iniciar a luta: todos os membros precisam estar perto do boss (~20 tiles) e um deles encostar nele.
 - **Fase 1, a luta**: cada membro age na sua vez (25 s por turno) com o Pokémon ativo; o boss revida em quem atacou. O boss é sempre **Lv.100** (avisa se a média do grupo for baixa) e a vida é multiplicada. Se todos forem eliminados, o boss vence e o grupo volta curado ao Centro.
 - **Fase 2, a captura**: ao chegar em 15% de HP o boss fica **exausto** e ainda tem vida. Todos ganham muito EXP (a equipe inteira, com evolução) e materiais, e **cada membro tem UMA rodada para lançar uma Pokébola** (bônus de captura ×3 no boss exausto; a Master Ball é garantida). Quem capturar leva o lendário; se ninguém conseguir, ele foge.

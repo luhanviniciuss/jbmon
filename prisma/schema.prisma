@@ -38,3 +38,9 @@ model Pokemon {
 
   @@index([user_id])
 }
+
+// Pares chave/valor do mundo (ex.: quando o último boss apareceu, para manter o intervalo de 3 h mesmo após reinícios)
+model Meta {
+  key   String @id
+  value String
+}

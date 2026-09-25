@@ -12,6 +12,7 @@
     "start": "prisma db push --skip-generate && node server/index.js",
     "setup": "prisma db push",
     "studio": "prisma studio",
+    "export": "node scripts/export.js",
     "postinstall": "prisma generate"
   },
   "dependencies": {

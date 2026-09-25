@@ -116,7 +116,7 @@ const invOf = (u) => ({ poke: u.pokeballs, great: u.greatballs, ultra: u.ultraba
 const matsOf = (u) => ({ apricorns: u.apricorns, shards: u.shards });
 const battlingUsers = new Set(); // ids em batalha (bloqueia o craft)
 
-// Health check (Render): 200 só se o banco responder
+// Health check (monitoramento/proxy): 200 só se o banco responder
 app.get('/healthz', async (req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;

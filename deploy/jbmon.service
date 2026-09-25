@@ -1,0 +1,23 @@
+# /etc/systemd/system/jbmon.service
+[Unit]
+Description=JBMon - MMORPG Pokemon 2D
+After=network.target
+
+[Service]
+Type=simple
+User=jbmon
+WorkingDirectory=/opt/jbmon
+EnvironmentFile=/opt/jbmon/.env
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=3
+# O servidor salva tudo ao receber SIGTERM; dê tempo para terminar
+KillSignal=SIGTERM
+TimeoutStopSec=30
+# Endurecimento básico
+NoNewPrivileges=true
+ProtectSystem=full
+ReadWritePaths=/opt/jbmon /var/lib/jbmon
+
+[Install]
+WantedBy=multi-user.target

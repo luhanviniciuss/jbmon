@@ -1,0 +1,7 @@
+# /etc/caddy/Caddyfile
+# Troque pelo seu domínio (o DNS tipo A precisa apontar para o IP do VPS).
+# O Caddy obtém e renova o HTTPS sozinho e já encaminha WebSockets (Socket.io).
+jogo.seudominio.com {
+	encode gzip
+	reverse_proxy localhost:3000
+}

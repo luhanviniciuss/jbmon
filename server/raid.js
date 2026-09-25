@@ -94,7 +94,7 @@ module.exports = function createRaidSystem(ctx) {
   const emitBoss = (target = io) => target.emit('boss:state', { boss: bossPublic(), nextIn: nextAt ? Math.max(0, nextAt - Date.now()) : null });
 
   function spawnBoss() {
-    if (boss) return;
+    if (boss) return false;
     let tx, ty;
     for (let i = 0; i < 500; i++) {
       tx = rand(4, 95); ty = rand(4, 95);
@@ -106,17 +106,28 @@ module.exports = function createRaidSystem(ctx) {
     io.emit('notice', { msg: `✦ ${bossName(species_id)} lendário (Lv.${BOSS_LEVEL}) apareceu! Treine sua equipe, forme um grupo (G) e enfrente-o!`, big: true });
     emitBoss();
     console.log(`Boss: ${bossName(species_id)} em (${tx},${ty})`);
+    return true;
   }
 
-  function scheduleBosses() {
-    nextAt = Date.now() + CFG.first;
-    const loop = () => {
-      spawnBoss();
+  // A hora do último boss fica no banco: o intervalo de 3 h vale mesmo se o servidor dormir ou reiniciar
+  // (no plano gratuito do Render ele dorme sem jogadores; sem isso, todo despertar traria um boss novo).
+  async function scheduleBosses() {
+    let last = 0;
+    try { last = Number((await prisma.meta.findUnique({ where: { key: 'lastBossAt' } }))?.value) || 0; } catch (e) { console.error('Meta indisponível:', e.message); }
+    const dueIn = Math.max(CFG.first, last + CFG.interval - Date.now());
+    nextAt = Date.now() + dueIn;
+    const loop = async () => {
+      const spawned = spawnBoss();
       nextAt = Date.now() + CFG.interval;
       emitBoss();
+      if (spawned) {
+        const value = String(Date.now());
+        prisma.meta.upsert({ where: { key: 'lastBossAt' }, update: { value }, create: { key: 'lastBossAt', value } }).catch((e) => console.error('Falha ao salvar agenda do boss:', e.message));
+      }
       setTimeout(loop, CFG.interval);
     };
-    setTimeout(loop, CFG.first);
+    setTimeout(loop, dueIn);
+    console.log(`Próximo boss em ${Math.round(dueIn / 60000)} min`);
     setInterval(() => { // expira se ninguém enfrentou
       if (boss && !boss.busy && Date.now() >= boss.expiresAt) {
         io.emit('notice', { msg: `${bossName(boss.species_id)} foi embora…` });

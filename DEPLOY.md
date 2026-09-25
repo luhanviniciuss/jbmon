@@ -32,7 +32,8 @@ sudo useradd --system --create-home --shell /usr/sbin/nologin jbmon
 sudo mkdir -p /opt/jbmon /var/lib/jbmon
 sudo chown jbmon:jbmon /opt/jbmon /var/lib/jbmon
 
-# Código (se o repositório for privado, use um token/deploy key do GitHub)
+# Código. O repositório é PRIVADO: o git vai pedir usuário e um Personal Access Token do GitHub (escopo "repo", só leitura basta),
+# ou use uma deploy key (Settings do repositório → Deploy keys) com a URL git@github.com:luhanviniciuss/jbmon.git
 sudo -u jbmon git clone https://github.com/luhanviniciuss/jbmon.git /opt/jbmon
 cd /opt/jbmon && sudo -u jbmon npm install
 ```
@@ -110,22 +111,22 @@ como o boss ativo, recomeça; a agenda de 3 h em 3 h do boss é guardada no banc
   ```
 
 ## 7. Levar seu banco local (contas atuais) para o VPS
-**Não coloque o banco no git**: ele guarda os nomes e os hashes das senhas dos jogadores (e o repositório é público).
-Envie direto por SSH. Uma cópia consistente do banco atual fica em `prisma\backups\jbmon-para-vps.db` (ou use o backup mais recente
-de `prisma\backups`). No seu computador (PowerShell):
-```powershell
-scp prisma\backups\jbmon-para-vps.db root@SEU_IP:/tmp/jbmon.db
-```
+O repositório traz uma cópia consistente do banco em `deploy/seed/jbmon.db` (contas e Pokémon da hora do commit).
+
+> **O repositório precisa ser PRIVADO** enquanto esse arquivo existir: ele guarda os nomes e os hashes das senhas dos jogadores.
+> Depois de copiar para o VPS, o ideal é remover `deploy/seed/` do repositório (`git rm -r deploy/seed`); como o histórico do git
+> guarda o arquivo, mantenha o repositório privado.
+
 No VPS, **com o serviço parado** (na primeira vez ainda nem existe banco, então faça antes de ligar):
 ```bash
 sudo systemctl stop jbmon 2>/dev/null
 sudo mkdir -p /var/lib/jbmon
-sudo cp /tmp/jbmon.db /var/lib/jbmon/jbmon.db
-sudo rm -f /var/lib/jbmon/jbmon.db-wal /var/lib/jbmon/jbmon.db-shm /tmp/jbmon.db
+sudo cp /opt/jbmon/deploy/seed/jbmon.db /var/lib/jbmon/jbmon.db
+sudo rm -f /var/lib/jbmon/jbmon.db-wal /var/lib/jbmon/jbmon.db-shm
 sudo chown jbmon:jbmon /var/lib/jbmon/jbmon.db && sudo chmod 600 /var/lib/jbmon/jbmon.db
 sudo systemctl start jbmon
 ```
-Faça isso **uma única vez**: depois o banco vivo é o de `/var/lib/jbmon`; copiar de novo por cima apaga o progresso dos jogadores.
+Faça isso **uma única vez**: depois o banco vivo é o de `/var/lib/jbmon`; copiar o seed por cima de novo apaga o progresso dos jogadores.
 Entre com uma conta antiga para confirmar. Pule esta etapa para começar com o mundo limpo.
 
 ## Manutenção do dia a dia

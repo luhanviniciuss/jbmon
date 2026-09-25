@@ -56,8 +56,9 @@ const grassTiles = [];
 MAP.forEach((row, y) => row.forEach((t, x) => { if (t === 4 && !inClearing(x, y)) grassTiles.push([x, y]); }));
 const wilds = new Map(); // id -> { id, species_id, level, tx, ty, homeX, homeY, x, y, busy }
 let nextWildId = 1;
-// Nível cresce com a distância do Centro: ~5 perto, ~25 no meio do mapa e ~50 nos cantos (dá para treinar até o 70+)
-const wildLevelAt = (tx, ty) => Math.max(2, Math.min(70, Math.round(1 + Math.hypot(tx - 50, ty - 50) * 0.7) + rand(-1, 2)));
+// Nível cresce com a distância do Centro: ~5 perto, ~30 a 40 no meio do mapa e até 60 nos cantos (treino até o 60)
+const WILD_MAX_LEVEL = 60; // teto dos selvagens comuns (os lendários são sempre 100)
+const wildLevelAt = (tx, ty) => Math.max(2, Math.round(1 + Math.hypot(tx - 50, ty - 50) * 0.9) + rand(-2, 3));
 const LEGENDARY_LEVEL = 100; // todos os lendários são nível 100
 const shoreWater = []; // tiles de água encostados em terra: onde os Pokémon aquáticos vivem
 MAP.forEach((row, y) => row.forEach((t, x) => {
@@ -80,10 +81,10 @@ function spawnWild(water = false) {
   for (let i = 0; i < 300; i++) {
     tile = pool[rand(0, pool.length - 1)];
     const d = Math.hypot(tile[0] - 50, tile[1] - 50);
-    if (rarity === 'legendary' ? d >= 40 : Math.random() < 0.4 || d < 30) break; // lendários só longe do centro
+    if (rarity === 'legendary' ? d >= 40 : Math.random() < 0.6 || d < 30) break; // lendários só longe do centro
   }
   const [tx, ty] = tile;
-  let level = rarity === 'legendary' ? LEGENDARY_LEVEL : Math.min(75, wildLevelAt(tx, ty) + LEVEL_BONUS[rarity]);
+  let level = rarity === 'legendary' ? LEGENDARY_LEVEL : Math.min(WILD_MAX_LEVEL, wildLevelAt(tx, ty) + LEVEL_BONUS[rarity]);
   // Formas evoluídas nunca aparecem abaixo do nível em que a pré-evolução evolui (Pikachu >= 16, Raichu >= 32...)
   if (level < minLevel(id)) level = minLevel(id) + rand(0, 3);
   const w = { id: nextWildId++, species_id: id, level, water, tx, ty, homeX: tx, homeY: ty, x: tx * TILE + TILE / 2, y: ty * TILE + TILE / 2, busy: false };

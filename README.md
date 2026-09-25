@@ -28,6 +28,8 @@ Abra em duas abas, crie duas contas e **clique/toque no mapa** para andar (segur
 
 Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`, depois `npm run setup`.
 
+**Publicar online (Render):** veja [DEPLOY.md](DEPLOY.md) e o `render.yaml`. Precisa de plano pago com disco persistente e uma única instância.
+
 ## Batalhas e encontros
 - **Selvagens no mapa**: ~70 Pokémon vivem na grama alta, visíveis com nome e nível, vagando perto de casa (pontos laranja no minimapa). A batalha começa ao encostar num deles. Quanto mais longe do Centro, mais fortes. Vencer/capturar remove o Pokémon (um novo nasce em 15 s); fugir ou perder o devolve ao mapa, com 4 s de imunidade para você.
 - **Pokémon aquáticos**: ~24 vivem na água das margens dos lagos (pontos azuis no minimapa). Você não entra na água, mas se estiver na margem perto deles (~1,5 tile) a batalha começa. Clicar na água leva você até a margem mais próxima.

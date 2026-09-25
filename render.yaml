@@ -1,0 +1,28 @@
+# Blueprint do Render para o JBMon.
+# O jogo mantém o mundo (Pokémon, boss, grupos) na memória de UM processo e usa SQLite em disco,
+# então precisa de um plano PAGO com disco persistente e de uma única instância.
+projects:
+  - name: pokemon
+    environments:
+      - name: Production
+        services:
+          - type: web
+            name: jbmon
+            runtime: node
+            plan: 0.5c-512mb # menor plano pago (o gratuito não tem disco e dorme após 15 min)
+            region: virginia # mais perto do Brasil entre as regiões dos EUA (ohio também serve)
+            buildCommand: npm install
+            startCommand: npm start # cria/atualiza as tabelas no disco (prisma db push) e liga o servidor
+            healthCheckPath: /healthz
+            autoDeployTrigger: commit
+            disk:
+              name: jbmon-data
+              mountPath: /var/data # o banco e os backups ficam aqui e sobrevivem a deploys/reinícios
+              sizeGB: 1
+            envVars:
+              - key: NODE_VERSION
+                value: "22"
+              - key: DATABASE_URL
+                value: "file:/var/data/jbmon.db?connection_limit=1&socket_timeout=15"
+              - key: JWT_SECRET
+                generateValue: true # o Render gera um segredo aleatório e longo

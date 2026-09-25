@@ -116,6 +116,16 @@ const invOf = (u) => ({ poke: u.pokeballs, great: u.greatballs, ultra: u.ultraba
 const matsOf = (u) => ({ apricorns: u.apricorns, shards: u.shards });
 const battlingUsers = new Set(); // ids em batalha (bloqueia o craft)
 
+// Health check (Render): 200 só se o banco responder
+app.get('/healthz', async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ ok: true, players: players.size, wilds: wilds.size });
+  } catch (e) {
+    res.status(503).json({ ok: false });
+  }
+});
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
@@ -438,7 +448,7 @@ async function main() {
   console.log('Banco conectado');
   await tuneDatabase();
   startBackups(prisma);
-  server.listen(PORT, () => console.log(`Servidor em http://localhost:${PORT}`));
+  server.listen(PORT, '0.0.0.0', () => console.log(`Servidor em http://localhost:${PORT}`));
 }
 main().catch((e) => {
   console.error('Falha ao iniciar:', e.message);

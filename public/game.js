@@ -263,6 +263,12 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { openParty(false); openBag(false); openGroup(false); }
 });
 
+// Largura dos botões de ação do HUD -> variável CSS (a barra de cima usa para não colidir com eles, em qualquer tamanho de tela)
+{
+  const ha = document.querySelector('.hud-actions');
+  if (ha && window.ResizeObserver) new ResizeObserver(() => $('hud').style.setProperty('--act-w', ha.offsetWidth + 'px')).observe(ha);
+}
+
 // ---------- Minimapa ----------
 const MINI_COLORS = {
   route: ['#4caf50', '#e6d38a', '#2f6fd6', '#1b5e20', '#2e8b3d'],
@@ -421,7 +427,7 @@ class WorldScene extends Phaser.Scene {
       MY_CLAN = self.clan || null;
       setClanLabel();
       setBalls(balls);
-      this.others.forEach((o) => { o.sprite.destroy(); o.label.destroy(); o.shadow.destroy(); o.tag.destroy(); });
+      this.others.forEach((o) => { o.sprite.destroy(); o.label.destroy(); o.shadow.destroy(); o.tag.destroy(); this.killBuddy(o); });
       this.others.clear();
       if (this.player) this.player.setPosition(self.x, self.y); else this.spawnSelf(self);
       others.forEach((p) => this.addOther(p));
@@ -435,7 +441,7 @@ class WorldScene extends Phaser.Scene {
       const o = this.others.get(id);
       if (!o) return;
       if (!quiet) toast(`${o.name} saiu`);
-      o.sprite.destroy(); o.label.destroy(); o.shadow.destroy(); o.tag.destroy();
+      o.sprite.destroy(); o.label.destroy(); o.shadow.destroy(); o.tag.destroy(); this.killBuddy(o);
       this.others.delete(id);
     });
     window.worldScene = this;
@@ -485,7 +491,7 @@ class WorldScene extends Phaser.Scene {
     this.socket.on('gym:exited', () => this.closeInterior());
     this.socket.on('world:enter', ({ world, x, y, others, wilds }) => {
       this.closeInterior(false);
-      this.others.forEach((o) => { o.sprite.destroy(); o.label.destroy(); o.shadow.destroy(); o.tag.destroy(); });
+      this.others.forEach((o) => { o.sprite.destroy(); o.label.destroy(); o.shadow.destroy(); o.tag.destroy(); this.killBuddy(o); });
       this.others.clear();
       this.wilds.forEach((w) => this.destroyWild(w));
       this.wilds.clear();
@@ -502,6 +508,11 @@ class WorldScene extends Phaser.Scene {
       this.cameras.main.fadeIn(500, 255, 255, 255);
       const d = WORLDS[world];
       toast(d.icon + ' ' + d.name, true);
+    });
+    this.socket.on('player:buddy', ({ id, species_id }) => {
+      if (id === MY_ID) return this.setMyBuddy(species_id);
+      const o = this.others.get(id);
+      if (o) this.setBuddy(o, species_id);
     });
     this.socket.on('player:hide', ({ id, hidden }) => this.setHidden(id, hidden));
     this.socket.on('player:combat', ({ id, combat }) => this.setCombat(id, combat));
@@ -868,6 +879,7 @@ class WorldScene extends Phaser.Scene {
     this.others.set(p.id, o);
     this.setCombat(p.id, p.combat);
     if (p.hidden) this.setHidden(p.id, true);
+    if (p.buddy) this.setBuddy(o, p.buddy);
   }
 
   // ----- Click-to-move: BFS nos tiles + suavização por linha de visão -----
@@ -938,6 +950,54 @@ class WorldScene extends Phaser.Scene {
     o.hidden = !!hidden;
     [o.sprite, o.label, o.shadow].forEach((x) => x.setVisible(!hidden));
     o.tag.setVisible(!hidden && !!o.combat);
+    if (o.buddy) o.buddy.hidden = !!hidden;
+  }
+
+  // ===== Pokémon companheiro: o 1º da equipe anda ao lado do dono (todos no mundo veem) =====
+  makeBuddy(species, x, y) {
+    const shadow = this.add.image(x, y, 'shadow').setDepth(8).setScale(0.9).setVisible(false);
+    const img = this.add.image(x, y, 'wilddot').setDepth(9.6).setVisible(false);
+    const b = { species, img, shadow, x, y, hidden: false, ready: false, phase: Math.random() * 6 };
+    this.ensureMon(species, (key) => { if (img.active) { img.setTexture(key).setDisplaySize(46, 46); b.ready = true; } });
+    return b;
+  }
+  destroyBuddy(b) { if (b) { b.img.destroy(); b.shadow.destroy(); } }
+  setBuddy(o, species) { // o = entrada de this.others
+    if (o.buddy?.species === species) return;
+    this.destroyBuddy(o.buddy);
+    o.buddy = null;
+    if (species) { o.buddy = this.makeBuddy(species, o.sprite.x + 24, o.sprite.y + 6); o.buddy.hidden = !!o.hidden; }
+  }
+  killBuddy(o) { this.destroyBuddy(o.buddy); o.buddy = null; }
+  setMyBuddy(species) {
+    this.myBuddySpecies = species;
+    if (this.myBuddy?.species === species) return;
+    this.destroyBuddy(this.myBuddy);
+    this.myBuddy = null;
+    if (species && this.player) this.myBuddy = this.makeBuddy(species, this.player.x + 24, this.player.y + 6);
+  }
+  // Segue o dono: fica ao lado/atrás conforme a direção, com suavidade; teletransporte (mundo novo) = aparece junto
+  stepBuddy(b, owner, dir, dt, time, hideIt) {
+    const OFF = { down: [22, -22], up: [22, 26], left: [30, 8], right: [-30, 8] }[dir] || [22, -22];
+    const tx = owner.x + OFF[0], ty = owner.y + OFF[1];
+    const dx = tx - b.x, dy = ty - b.y, dist = Math.hypot(dx, dy);
+    let moved = false;
+    if (dist > 260) { b.x = tx; b.y = ty; }
+    else if (dist > 2) {
+      const step = Math.min(dist, Math.min(dist * 6, PLAYER_SPEED * 1.3) * (dt / 1000));
+      b.x += (dx / dist) * step; b.y += (dy / dist) * step;
+      moved = step > 0.35;
+    }
+    const bob = moved ? Math.abs(Math.sin(time / 90 + b.phase)) * 5 : Math.sin(time / 500 + b.phase) * 1.2; // pulinhos ao andar, respira parado
+    const vis = b.ready && !hideIt && !b.hidden && Settings.buddyOn();
+    b.img.setVisible(vis).setPosition(b.x, b.y - 10 - bob);
+    b.shadow.setVisible(vis).setPosition(b.x, b.y + 12);
+    b.img.setDepth(b.y > owner.y ? 10.6 : 9.4);
+  }
+  updateBuddies(time, delta) {
+    if (!this.myBuddy && this.myBuddySpecies && this.player) this.setMyBuddy(this.myBuddySpecies);
+    if (this.myBuddy && this.player) this.stepBuddy(this.myBuddy, this.player, this.pDir, delta, time, this.inLab);
+    this.others.forEach((o) => { if (o.buddy) this.stepBuddy(o.buddy, o.sprite, o.dir, delta, time, false); });
   }
 
   ensureMon(id, cb) {
@@ -1064,6 +1124,7 @@ class WorldScene extends Phaser.Scene {
     this.myShadow.setPosition(p.x, p.y + 12);
     this.wilds.forEach((w) => { w.shadow.setPosition(w.img.x, w.img.y + 14); w.label.setPosition(w.img.x, w.img.y - 34); });
     this.others.forEach((o) => { o.label.setPosition(o.sprite.x, o.sprite.y - 26); o.tag.setPosition(o.sprite.x, o.sprite.y - 44); o.shadow.setPosition(o.sprite.x, o.sprite.y + 12); });
+    this.updateBuddies(time, delta);
     $('coords').textContent = `${Math.floor(p.x / TILE)}, ${Math.floor(p.y / TILE)}`;
     this.drawMinimap();
 

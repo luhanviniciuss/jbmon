@@ -90,8 +90,8 @@ class GymScene extends Phaser.Scene {
       this.tweens.add({ targets: fire, scale: 1.5, alpha: 0.5, yoyo: true, repeat: -1, duration: 260 + Math.random() * 200 });
       this.add.circle(x, y - 46, 16, 0xff7a28, 0.12).setDepth(2);
     });
-    this.add.text(320, 30, 'GINÁSIO', { fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: '22px', fontStyle: 'bold', color: '#ffe9a8', stroke: '#1c2236', strokeThickness: 5 }).setOrigin(0.5).setDepth(3);
-    this.add.text(320, 58, 'Escolha um portal', { fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: '12px', color: '#c8cff0' }).setOrigin(0.5).setDepth(3);
+    this.add.text(320, 62, 'GINÁSIO', { fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: '22px', fontStyle: 'bold', color: '#ffe9a8', stroke: '#1c2236', strokeThickness: 5 }).setOrigin(0.5).setDepth(3);
+    this.add.text(320, 88, 'Escolha um portal', { fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: '12px', color: '#c8cff0' }).setOrigin(0.5).setDepth(3);
   }
 
   drawPortal(p) {

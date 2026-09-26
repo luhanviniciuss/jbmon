@@ -573,3 +573,26 @@ textarea.af { resize: vertical; }
 
 /* chip do mundo atual no HUD */
 #worldChip { font-weight: 700; white-space: nowrap; }
+
+/* ---------- PC: a barra de cima (perfil, mundo, online...) nunca colide com os botões de ação ----------
+   O JS mede a largura dos botões (--act-w) e a barra da esquerda quebra de linha no espaço que sobra.
+   Em telas menores os botões perdem os atalhos e depois os rótulos (só ícones). */
+@media (min-width: 641px) {
+  .hud-top { max-width: calc(100% - var(--act-w, 0px) - 12px); }
+}
+@media (min-width: 641px) and (max-width: 1499px) { .fab kbd { display: none; } }
+@media (min-width: 641px) and (max-width: 1099px) {
+  .fab .lbl { display: none; }
+  .fab { padding: 10px 13px; }
+  .fab .ic { font-size: 18px; }
+}
+
+/* PC: as gavetas laterais começam abaixo da barra de botões, para os botões continuarem clicáveis com a gaveta aberta */
+@media (min-width: 641px) {
+  .drawer { top: calc(62px + var(--safe-t)); padding-top: 16px; }
+}
+
+/* PC: o painel de acoes da batalha fica centralizado e com largura confortavel (antes esticava pela tela toda) */
+@media (min-width: 900px) {
+  .battle > .b-panel { width: min(780px, 100%); align-self: center; }
+}

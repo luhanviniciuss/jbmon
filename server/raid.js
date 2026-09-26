@@ -409,6 +409,7 @@ module.exports = function createRaidSystem(ctx) {
       ...(withCapture ? [prisma.pokemon.create({ data: { user_id: m.uid, species_id: r.boss.species_id, level: r.level, hp: r.stats.hp, attack: r.stats.attack, defense: r.stats.defense, current_hp: r.stats.hp, slot } })] : []),
       ]);
     });
+    ctx.buddyRefresh?.(m.uid); // evolução na raid muda o companheiro
   }
 
   async function finish(r, result, log) {

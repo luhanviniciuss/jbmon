@@ -3,7 +3,7 @@
 const Settings = (() => {
   const KEY = 'jbmon.settings';
   const RTC = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] };
-  let cfg = { voip: false, muted: false, vol: 1 };
+  let cfg = { voip: false, muted: false, vol: 1, buddy: true };
   try { cfg = { ...cfg, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch {}
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch {} };
 
@@ -41,6 +41,8 @@ const Settings = (() => {
     const [st, txt] = status();
     const members = GROUP ? GROUP.members.filter((m) => m.id !== MY_ID) : [];
     $('settingsBody').innerHTML =
+      '<div class="section-title">Jogo</div>' +
+      '<label class="setrow"><span><b>Pokémon ao meu lado</b><small>Seu primeiro Pokémon anda com você (e você vê os dos outros jogadores).</small></span><input type="checkbox" class="switch" id="setBuddy"' + (cfg.buddy ? ' checked' : '') + ' /></label>' +
       '<div class="section-title">Voz do grupo (VoIP)</div>' +
       '<label class="setrow"><span><b>Conversar por voz com o grupo</b><small>Só quem está no seu grupo e com a voz ligada ouve você.</small></span><input type="checkbox" class="switch" id="setVoip"' + (cfg.voip ? ' checked' : '') + ' /></label>' +
       '<div class="voipstat ' + st + '">' + esc(txt) + '</div>' +
@@ -52,6 +54,7 @@ const Settings = (() => {
         return '<div class="item vm"><span class="avatar sm" data-vid="' + m.id + '">' + esc(m.username[0]) + '</span><div><b>' + esc(m.username) + '</b></div><em>' + state + '</em></div>';
       }).join('') : '') +
       '<p class="hintline">O áudio vai direto entre os jogadores (não passa pelo servidor). O navegador pede permissão do microfone, e a voz só funciona em <b>HTTPS</b> (ou localhost). Se a conexão não fechar, alguma rede pode estar bloqueando conexões diretas.</p>';
+    $('setBuddy').addEventListener('change', (e) => { cfg.buddy = e.target.checked; save(); });
     $('setVoip').addEventListener('change', (e) => { cfg.voip = e.target.checked; save(); sync(); });
     $('setMute').addEventListener('change', (e) => { cfg.muted = e.target.checked; save(); applyMute(); render(); });
     $('setVol').addEventListener('input', (e) => { cfg.vol = e.target.value / 100; save(); peers.forEach((p) => (p.audio.volume = cfg.vol)); });
@@ -195,5 +198,5 @@ const Settings = (() => {
   $('voiceChip').addEventListener('click', () => { cfg.muted = !cfg.muted; save(); applyMute(); render(); });
   window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen()) open(false); });
 
-  return { init, open };
+  return { init, open, buddyOn: () => cfg.buddy };
 })();

@@ -79,7 +79,7 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 
 ## Interface responsiva (mobile-first)
 - **Celular** (até 640 px): HUD compacto no topo; Party, Bolsa, Grupo e Chat viram **botões flutuantes de 52 px** no canto inferior direito (alcance do polegar); equipe, bolsa e grupo abrem como gaveta inferior; alvos de toque ≥ 44 px; campos com fonte de 16 px (o iPhone não dá zoom ao digitar); respeita a área segura (notch) e o teclado virtual não cobre o chat (`interactive-widget=resizes-content`).
-- **Desktop**: botões em pílulas no topo direito com os atalhos (P, B, G, Enter) e chat fixo.
+- **Desktop**: botões em pílulas no topo direito com os atalhos (P, B, G, Enter) e chat fixo. A barra de cima (perfil, mundo, online, Pokébolas, lendário) mede a largura dos botões e **quebra de linha** no espaço que sobra, então nunca colide com eles; em telas de até 1499 px os botões perdem os atalhos e, até 1099 px, ficam só com ícones. As gavetas laterais começam **abaixo** da barra de botões (continuam clicáveis) e o painel de ações da batalha fica centralizado (até 780 px). Validado de 660 a 1920 px de largura.
 - Toda tela nova deve ser pensada primeiro para ~375 px e testada nos dois tamanhos.
 
 ## Painel de administração
@@ -108,6 +108,11 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 - **Efeitos por tipo** (`public/fx.js`, motor de partículas em canvas): cada um dos 17 tipos tem o seu roteiro — Fogo (bola de chamas e explosão), Água (jato e respingo com ondas), Elétrico (raios ramificados e clarão), Planta (folhas em espiral), Gelo (estilhaços e cristal), Lutador (socos com ondas de choque), Veneno (bolhas e poça), Terra (fissuras, pedras e poeira com tremor forte), Voador (cortes de vento e penas), Psíquico (anéis e espiral), Inseto (enxame), Pedra (chuva de pedras), Fantasma (fogos-fátuos), Dragão (chamas em hélice) , Sombrio (fumaça e garras) , Aço (corte em X e faíscas) e Normal (impacto). Golpes **críticos** ficam maiores, com mais partículas e clarão; o atacante avança (golpes físicos) e aparece o **dano flutuante** (dourado = super efetivo, cinza = pouco efetivo).
 - Vale para batalha selvagem, **raid** e **PvP** (no PvP o lado do atacante é ajustado para cada jogador). O servidor só manda o tipo do golpe no log; o efeito é só decoração e respeita "reduzir movimento" do sistema.
 - **Cenário por bioma**: o servidor deduz o bioma pelos tiles ao redor de onde a luta acontece (`server/biome.js`) e o cliente troca o cenário: **Campo**, **Grama alta** (flores), **Floresta** (pinheiros e raios de luz), **Praia** (mar com ondas e areia), **Lago** (montanhas e água brilhando; também para Pokémon aquáticos), **Praça do Centro Pokémon** (prédios e piso; PvP na clareira) e **Arena lendária** (vulcão e relâmpagos, nas raids). O nome do bioma aparece ao começar a batalha.
+
+## Pokémon companheiro
+- O **primeiro Pokémon da equipe (slot 1)** anda ao lado do seu personagem: fica ao lado/atrás conforme a direção, com pulinhos ao andar e "respirando" parado. Todos no mesmo mundo veem o companheiro dos outros jogadores.
+- Acompanha as mudanças: ao trocar o 1º da equipe (Party) ou quando ele **evolui** (batalha ou raid), o servidor avisa a sala e o sprite muda na hora. Sai de cena junto com o dono nos interiores (laboratório e ginásio) e aparece junto ao trocar de mundo.
+- Configurações (⚙): interruptor **"Pokémon ao meu lado"** liga/desliga a exibição (sua e dos outros). O servidor guarda só a espécie (`me.buddy`); o resto é visual.
 
 ## Personagem
 - O avatar é uma sprite sheet gerada em código (`drawAvatar` em `public/game.js`): boné com pompom, cabelo, rosto, jaqueta, braços, cinto, calça e tênis, em **4 direções** (frente, costas, esquerda, direita) com **animação de caminhada** (passos alternados, braços balançando e leve balanço do corpo). Você é vermelho; os outros jogadores ganham uma cor de jaqueta (6 opções) escolhida pelo nome, e o avatar também anda no laboratório.

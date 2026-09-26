@@ -153,6 +153,7 @@ app.post('/api/party/set', auth, async (req, res) => {
     ...ids.map((id, i) => prisma.pokemon.update({ where: { id }, data: { slot: i + 1 } })),
   ]));
   const { party, box } = await partyOf(prisma, req.user.id);
+  refreshBuddy(req.user.id);
   res.json({ party, box });
 });
 
@@ -234,9 +235,28 @@ function teleportTo(uid, x, y, worldId) {
   return true;
 }
 const teleportHome = (uid) => teleportTo(uid, SPAWN.x, SPAWN.y, 'route');
+
+// Pokémon companheiro: o 1º da equipe (slot 1) anda ao lado do dono. Guardamos só a espécie e avisamos a sala quando muda
+// (troca de equipe, evolução depois de batalha/raid, primeira conexão).
+async function refreshBuddy(uid) {
+  const me = meByUser.get(uid);
+  if (!me) return;
+  try {
+    const team = await loadTeam(prisma, uid);
+    const sid = team[0]?.species_id ?? null;
+    if (sid === me.buddy) return;
+    me.buddy = sid;
+    const sock = socketByUser.get(uid);
+    sock?.emit('player:buddy', { id: uid, species_id: sid });
+    sock?.to('w:' + me.world).emit('player:buddy', { id: uid, species_id: sid });
+  } catch (e) {
+    console.error('Falha ao atualizar o companheiro', e.message);
+  }
+}
 const raidSys = createRaidSystem({
   io, prisma, MAP, socketByUser, meByUser, teleportHome,
   clearing: inClearing,
+  buddyRefresh: (uid) => refreshBuddy(uid),
   isBusy: (uid) => battlingUsers.has(uid) || !!meByUser.get(uid)?.hidden,
   setBusy: (uid, v) => { v ? battlingUsers.add(uid) : battlingUsers.delete(uid); markCombat(uid, v ? 'raid' : null); }, // usado pela raid
 });
@@ -284,7 +304,7 @@ io.on('connection', (socket) => {
   // Evita sessão duplicada da mesma conta
   for (const [sid, p] of players) if (p.id === u.id) io.sockets.sockets.get(sid)?.disconnect(true);
 
-  const me = { id: u.id, username: u.username, x: u.x, y: u.y, dir: 'down', combat: null, hidden: false, inside: null, world: WORLDS[u.world] ? u.world : 'route', role: u.role, clan: socket.data.clan ? { ...socket.data.clan, role: u.clan_role } : null };
+  const me = { id: u.id, username: u.username, x: u.x, y: u.y, dir: 'down', combat: null, hidden: false, inside: null, buddy: null, world: WORLDS[u.world] ? u.world : 'route', role: u.role, clan: socket.data.clan ? { ...socket.data.clan, role: u.clan_role } : null };
   if (W[me.world].isBlocked(me.x, me.y)) { const sp = WORLDS[me.world].spawn; me.x = sp.x; me.y = sp.y; }
   players.set(socket.id, me);
   socketByUser.set(u.id, socket);
@@ -294,6 +314,7 @@ io.on('connection', (socket) => {
   chat.bind(socket, u.id);
   pvp.bind(socket, u.id);
   voip.bind(socket, u.id);
+  refreshBuddy(u.id);
 
   socket.emit('players:init', {
     self: me,
@@ -457,6 +478,7 @@ io.on('connection', (socket) => {
         else releaseWild(b.world);
         immuneUntil = Date.now() + IMMUNE_MS;
         battle = null;
+        refreshBuddy(u.id); // evolução no fim da batalha muda o companheiro
         setBusy(false);
         markCombat(u.id, null);
         lastTile = '';

@@ -9,6 +9,7 @@ const CLEAR_MIN = 46, CLEAR_MAX = 54; // clareira central da Rota = Centro Poké
 const LAB = { x0: 48, x1: 52, y0: 45, y1: 47, doorX: 50, doorY: 47 };        // Centro Pokémon da Rota
 const GYM = { x0: 68, x1: 72, y0: 45, y1: 47, doorX: 70, doorY: 47 };        // Ginásio: hub de portais (20 tiles a leste do Centro Pokémon)
 const TOWN_LAB = { x0: 48, x1: 52, y0: 40, y1: 42, doorX: 50, doorY: 42 };   // Centro Pokémon da Cidade
+const PROF_HOUSE = { x0: 31, x1: 35, y0: 47, y1: 51, doorX: 33, doorY: 51 };  // casa da esquerda da Cidade: Professor Carvalho (Modo História e dicas)
 const LABS = { route: LAB, town: TOWN_LAB };
 const PORTAL = { tx: 46, ty: 49 };                                            // portal de volta ao ginásio (mundos extras), 4 tiles a oeste da chegada
 const ARRIVE = { x: 50.5 * TILE, y: 49.5 * TILE };                            // onde o jogador chega em cada mundo extra
@@ -61,11 +62,14 @@ function genRoute() {
   return data;
 }
 
-// Clareira central (raio 6) de cada mundo extra: chegada do jogador e portal de volta
-const arrivalZone = (x, y) => Math.abs(x - 50) < 6 && Math.abs(y - 50) < 6;
+// Clareira central (raio 6) de cada mundo extra: chegada do jogador e portal de volta; e a do chefe/cume, no extremo norte
+const arrivalZone = (x, y) => (Math.abs(x - 50) < 6 && Math.abs(y - 50) < 6) || (Math.abs(x - 50) < 7 && Math.abs(y - 13) < 7);
+
+// Trilha garantida de 3 tiles da clareira de chegada até o chefe/cume (rios e lagos não podem fechar o caminho da história)
+const summitPath = (data) => { for (let y = 13; y <= 44; y++) for (let x = 49; x <= 51; x++) if (data[y][x] === 2 || data[y][x] === 3) data[y][x] = 1; return data; };
 
 function genIce() {
-  return grid((x, y) => {
+  return summitPath(grid((x, y) => {
     const e = Math.sin(x * 0.11 + 2) + Math.cos(y * 0.13 - 1) + Math.sin((x + y) * 0.05 + 1);
     let t = 0;
     if (e < -1.15) t = 2;                                   // lago congelado (bloqueia; Pokémon aquáticos)
@@ -75,11 +79,11 @@ function genIce() {
     if (isBorder(x, y)) t = 3;
     if (arrivalZone(x, y)) t = 0;
     return t;
-  });
+  }));
 }
 
 function genLava() {
-  return grid((x, y) => {
+  return summitPath(grid((x, y) => {
     const river = Math.abs(Math.sin(x * 0.08 + Math.cos(y * 0.06) * 2.2));
     let t = 0;
     if (river < 0.1) t = 2;                                 // rio de lava (bloqueia)
@@ -89,7 +93,7 @@ function genLava() {
     if (isBorder(x, y)) t = 3;
     if (arrivalZone(x, y)) t = 0;
     return t;
-  });
+  }));
 }
 
 // Casas da cidade (x, y, largura, altura em tiles): sólidas no mapa; o cliente desenha uma casa em cada uma
@@ -102,6 +106,7 @@ function genTown() {
   for (let y = 44; y <= 56; y++) for (let x = 44; x <= 56; x++) data[y][x] = 1;   // praça central
   for (let y = 53; y <= 54; y++) for (let x = 48; x <= 52; x++) data[y][x] = 2;   // fonte da praça
   stamp(data, TOWN_LAB);
+  stamp(data, PROF_HOUSE); // a porta da casa do Professor é andável
   return data;
 }
 
@@ -109,4 +114,4 @@ function generateMap(world = 'route') {
   return world === 'ice' ? genIce() : world === 'lava' ? genLava() : world === 'town' ? genTown() : genRoute();
 }
 
-if (typeof module !== "undefined") module.exports = { MAP_W, MAP_H, TILE, PLAYER_SPEED, CLEAR_MIN, CLEAR_MAX, LAB, GYM, TOWN_LAB, LABS, TOWN_HOUSES, PORTAL, ARRIVE, GYM_EXIT, WORLDS, WORLD_IDS, generateMap };
+if (typeof module !== "undefined") module.exports = { MAP_W, MAP_H, TILE, PLAYER_SPEED, CLEAR_MIN, CLEAR_MAX, LAB, GYM, TOWN_LAB, LABS, PROF_HOUSE, TOWN_HOUSES, PORTAL, ARRIVE, GYM_EXIT, WORLDS, WORLD_IDS, generateMap };

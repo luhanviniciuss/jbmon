@@ -203,6 +203,7 @@ module.exports = function createRaidSystem(ctx) {
       members.forEach((m) => raids.set(m.uid, r));
       emitBoss(); // some do mapa enquanto a raid acontece
       members.forEach((m) => socketByUser.get(m.uid)?.emit('raid:start', { state: stateFor(r, m) }));
+      members.forEach((m) => ctx.dexSeen?.(m.uid, boss.species_id)); // Pokédex: o lendário foi visto
       const log = [{ msg: `${bossName(boss.species_id)} Lv.${level} bloqueia o caminho! (${members.map((m) => m.username).join(', ')})`, bossHp: r.hp }];
       nextTurn(r, log);
       emitState(r, log);

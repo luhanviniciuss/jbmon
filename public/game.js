@@ -487,6 +487,8 @@ class WorldScene extends Phaser.Scene {
     };
     this.socket.on('lab:entered', () => openInterior('Lab'));
     this.socket.on('gym:entered', () => openInterior('Gym'));
+    this.socket.on('prof:entered', () => openInterior('Prof'));
+    this.socket.on('prof:exited', () => this.closeInterior());
     this.socket.on('lab:exited', () => this.closeInterior());
     this.socket.on('gym:exited', () => this.closeInterior());
     this.socket.on('world:enter', ({ world, x, y, others, wilds }) => {
@@ -519,6 +521,8 @@ class WorldScene extends Phaser.Scene {
     Battle.init(this.socket);
     Arena.init(this.socket);
     Settings.init(this.socket);
+    Story.init(this.socket);
+    Dex.init(this.socket);
     this.socket.on('notice', ({ msg, big }) => toast(msg, big));
     this.socket.on('boss:state', ({ boss, nextIn }) => { BOSS_NEXT = nextIn != null ? Date.now() + nextIn : null; this.setBoss(boss); });
     this.socket.on('group:update', (gr) => { GROUP = gr; setGroupLabel(); if ($('group').classList.contains('open')) renderGroup(); });
@@ -573,6 +577,7 @@ class WorldScene extends Phaser.Scene {
     this.worldId = def.id;
     (this.mapObjs || []).forEach((o) => { this.tweens.killTweensOf(o); o.destroy(); });
     this.mapObjs = [];
+    this.chiefs = [];
     this.tilemap?.destroy();
     this.playerCollider?.destroy();
     this.mapData = generateMap(def.id);
@@ -592,7 +597,7 @@ class WorldScene extends Phaser.Scene {
     } else {
       this.drawPortal();
       if (def.id === 'town') this.drawTown();
-      else this.weather(def.id);
+      else { this.weather(def.id); this.drawChiefs(def.id); }
     }
     $('worldChip').textContent = def.icon + ' ' + def.name;
   }
@@ -666,11 +671,32 @@ class WorldScene extends Phaser.Scene {
       g.fillStyle(0x6b4a2b).fillRect(dxp, y + hh - 34, 24, 34).fillStyle(0xffd54a).fillCircle(dxp + 19, y + hh - 16, 2);
     });
     this.drawCenter(TOWN_LAB);
+    { // casa do Professor Carvalho (Modo História e dicas)
+      const P = PROF_HOUSE, px = (P.x0 + (P.x1 - P.x0 + 1) / 2) * TILE;
+      this.txt(px, P.y0 * TILE - 18, '🎓 Prof. Carvalho', '12px', '#fff', '#2c3f7acc');
+      this.txt(px, (P.doorY + 1) * TILE + 14, '↑ Missões e dicas', '10px', '#fff', '#0b1020aa');
+    }
     const fg = this.reg(this.add.graphics().setDepth(3));                           // borda de pedra da fonte
     fg.lineStyle(5, 0x8f96a8).strokeRoundedRect(48 * TILE - 3, 53 * TILE - 3, 5 * TILE + 6, 2 * TILE + 6, 8);
     const spray = this.reg(this.add.circle(50.5 * TILE, 53.7 * TILE, 8, 0xdff3ff, 0.8).setDepth(4));
     this.tweens.add({ targets: spray, scale: 1.8, alpha: 0.2, yoyo: true, repeat: -1, duration: 700 });
     this.txt(50.5 * TILE, 52 * TILE - 6, 'Praça da Cidade', '11px', '#fff', '#0b1020aa');
+  }
+
+  // Chefe do cenário (Modo História): treinador com seu Pokémon no extremo norte do Gelo e do Vulcão. Encostar nele desafia.
+  drawChiefs(id) {
+    const c = CHIEFS[id];
+    if (!c) return;
+    const x = (c.tx + 0.5) * TILE, y = (c.ty + 0.5) * TILE, ice = id === 'ice';
+    const aura = this.reg(this.add.circle(x, y + 4, 46, ice ? 0x7fe3ff : 0xff6a2a, 0.22).setDepth(6));
+    this.tweens.add({ targets: aura, scale: 1.4, alpha: 0.06, yoyo: true, repeat: -1, duration: 1000 });
+    this.reg(this.add.image(x - 22, y + 14, 'shadow').setDepth(8).setScale(1.2));
+    this.reg(this.add.sprite(x - 22, y, 'other' + (ice ? 5 : 3), 'down0').setDepth(9).setScale(1.3));
+    const mon = this.reg(this.add.image(x + 28, y - 4, 'wilddot').setDepth(9));
+    this.ensureMon(c.species, (key) => { if (mon.active) mon.setTexture(key).setDisplaySize(76, 76); });
+    this.tweens.add({ targets: mon, y: y - 12, yoyo: true, repeat: -1, duration: 900, ease: 'Sine.easeInOut' });
+    this.txt(x, y - 56, '⚔ ' + c.name + ' · Lv.' + c.level, '12px', '#fff', ice ? '#1f6b8acc' : '#a3341fcc', 20);
+    this.chiefs.push({ id, x, y });
   }
 
   // Portal de volta ao ginásio (mundos extras)
@@ -835,6 +861,7 @@ class WorldScene extends Phaser.Scene {
     };
     drawAvatar('player', 0xe53950, 0xb02338);
     AVATAR_STYLES.forEach(([j, c], i) => drawAvatar('other' + i, j, c));
+    drawAvatar('prof', 0xf4f6ff, 0x9aa0b8); // Professor Carvalho: jaleco branco
     const avatar = (key, body) => {
       const g = this.make.graphics({ x: 0, y: 0, add: false });
       g.fillStyle(body).fillRoundedRect(7, 12, 18, 18, 6);
@@ -1128,10 +1155,14 @@ class WorldScene extends Phaser.Scene {
     $('coords').textContent = `${Math.floor(p.x / TILE)}, ${Math.floor(p.y / TILE)}`;
     this.drawMinimap();
 
+    // Chefe do cenário: encostar nele pede o desafio (o servidor confere a missão e a distância)
+    if (this.chiefs?.length && !inBattle && !this.inLab && time > (this.chiefCd || 0)) {
+      for (const ch of this.chiefs) if (Math.hypot(p.x - ch.x, p.y - ch.y) < 60) { this.chiefCd = time + 4000; this.socket.emit('story:challenge', ch.id); break; }
+    }
     // Portas: pisar no tile da porta pede a entrada (laboratório do Centro Pokémon, ou ginásio na Rota). O servidor confere.
     if (!inBattle && !this.inLab && !this.labPending) {
       const ptx = Math.floor(p.x / TILE), pty = Math.floor(p.y / TILE), lb = LABS[WORLD_ID];
-      const ev = lb && ptx === lb.doorX && pty === lb.doorY ? 'lab:enter' : WORLD_ID === 'route' && ptx === GYM.doorX && pty === GYM.doorY ? 'gym:enter' : null;
+      const ev = lb && ptx === lb.doorX && pty === lb.doorY ? 'lab:enter' : WORLD_ID === 'route' && ptx === GYM.doorX && pty === GYM.doorY ? 'gym:enter' : WORLD_ID === 'town' && ptx === PROF_HOUSE.doorX && pty === PROF_HOUSE.doorY ? 'prof:enter' : null;
       if (ev) {
         this.labPending = true;
         this.socket.emit(ev);
@@ -1165,6 +1196,6 @@ function startGame() {
     physics: { default: 'arcade' },
     loader: { crossOrigin: 'anonymous' },
     scale: { mode: Phaser.Scale.RESIZE },
-    scene: [WorldScene, LabScene, GymScene],
+    scene: [WorldScene, LabScene, GymScene, ProfScene],
   });
 }

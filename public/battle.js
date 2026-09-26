@@ -136,6 +136,7 @@ const Battle = (() => {
     $('ballBack').hidden = false;
     document.querySelector('#bActions [data-act=run]').firstChild.textContent = m === 'raid' ? 'Sair' : 'Fugir';
     document.querySelector('#bActions [data-act=switch]').hidden = false;
+    document.querySelector('#bActions [data-act=ballmenu]').hidden = false;
     showPicker(false);
     $('bContinue').hidden = true;
     return foe;
@@ -153,6 +154,11 @@ const Battle = (() => {
     lock(true);
     const sp = SPECIES[d.wild.species_id];
     msg(`Um ${sp.name} selvagem apareceu! · ${Fx.BIOME_NAMES[d.biome] || 'Campo'}${sp.rarity === 'common' ? '' : ' ✦ ' + rarityOf(d.wild.species_id).label}`);
+    if (d.chief) { // Modo História: chefe de cenário (não dá para capturar)
+      $('foeName').textContent = d.chief;
+      document.querySelector('#bActions [data-act=ballmenu]').hidden = true;
+      msg('⚔ ' + d.chief + ' desafia você! O Pokémon dele não pode ser capturado.');
+    }
     setTimeout(() => lock(false), 1300);
   }
 

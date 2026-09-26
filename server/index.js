@@ -6,7 +6,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Server } = require('socket.io');
 const { PrismaClient } = require('@prisma/client');
-const { MAP_W, TILE, PLAYER_SPEED, CLEAR_MIN, CLEAR_MAX, GYM, LABS, PORTAL, ARRIVE, GYM_EXIT, WORLDS, WORLD_IDS, generateMap } = require('../public/map.js');
+const { MAP_W, TILE, PLAYER_SPEED, CLEAR_MIN, CLEAR_MAX, GYM, LABS, PROF_HOUSE, PORTAL, ARRIVE, GYM_EXIT, WORLDS, WORLD_IDS, generateMap } = require('../public/map.js');
 const createWorld = require('./world.js');
 const { SPECIES, WILD_TABLE, WATER_TABLE, calcStats, minLevel } = require('../public/species.js');
 const { BALLS, RECIPES } = require('../public/items.js');
@@ -18,6 +18,8 @@ const createClans = require('./clan.js');
 const createPvp = require('./pvp.js');
 const { biomeAt } = require('./biome.js');
 const createVoip = require('./voip.js');
+const createPokedex = require('./pokedex.js');
+const createStory = require('./story.js');
 const registerAdmin = require('./admin.js');
 const { retry, durable, flushPending, pendingCount } = require('./durable.js');
 const { loadTeam, nextFreeSlot, partyOf } = require('./team.js');
@@ -62,8 +64,9 @@ const inClearing = (tx, ty) => tx >= CLEAR_MIN - 1 && tx <= CLEAR_MAX + 1 && ty 
 let nextWildId = 1;
 const W = {}; // id do mundo -> mundo
 for (const wid of WORLD_IDS) W[wid] = createWorld({ io, id: wid, MAP: wid === 'route' ? MAP : generateMap(wid), newId: () => nextWildId++ });
-const releaseWild = (w) => W[w.worldId].releaseWild(w);
-const defeatWild = (w) => W[w.worldId].defeatWild(w);
+// Chefes de cenário (Modo História) são batalhas especiais: não estão na lista de selvagens, então não voltam ao mapa nem renascem
+const releaseWild = (w) => { if (w.story) { w.busy = false; return; } W[w.worldId].releaseWild(w); };
+const defeatWild = (w) => { if (w.story) return; W[w.worldId].defeatWild(w); };
 const isBlocked = (x, y, world = 'route') => W[world].isBlocked(x, y);
 const allWilds = () => WORLD_IDS.flatMap((wid) => [...W[wid].wilds.values()]);
 
@@ -220,6 +223,7 @@ function changeWorld(uid, worldId, x, y) {
   sock.to('w:' + worldId).emit('player:joined', me, true);
   sock.emit('world:enter', { world: worldId, x, y, others: [...players.values()].filter((p) => p.world === worldId && p.id !== me.id), wilds: W[worldId].publicList() });
   savePosition(me, true);
+  story.onWorld(uid, worldId);
   return true;
 }
 function teleportTo(uid, x, y, worldId) {
@@ -238,9 +242,10 @@ const teleportHome = (uid) => teleportTo(uid, SPAWN.x, SPAWN.y, 'route');
 
 // Pokémon companheiro: o 1º da equipe (slot 1) anda ao lado do dono. Guardamos só a espécie e avisamos a sala quando muda
 // (troca de equipe, evolução depois de batalha/raid, primeira conexão).
-async function refreshBuddy(uid) {
+async function refreshBuddy(uid, quiet = false) {
   const me = meByUser.get(uid);
   if (!me) return;
+  pokedex.syncOwned(uid, quiet); // tudo que o jogador possui vira "capturado" na Pokédex (evolução, captura, presentes)
   try {
     const team = await loadTeam(prisma, uid);
     const sid = team[0]?.species_id ?? null;
@@ -257,11 +262,13 @@ const raidSys = createRaidSystem({
   io, prisma, MAP, socketByUser, meByUser, teleportHome,
   clearing: inClearing,
   buddyRefresh: (uid) => refreshBuddy(uid),
+  dexSeen: (uid, sp) => pokedex.mark(uid, sp, 'seen'),
   isBusy: (uid) => battlingUsers.has(uid) || !!meByUser.get(uid)?.hidden,
   setBusy: (uid, v) => { v ? battlingUsers.add(uid) : battlingUsers.delete(uid); markCombat(uid, v ? 'raid' : null); }, // usado pela raid
 });
 
 registerAdmin({
+  afterGive: (uid) => refreshBuddy(uid),
   app, prisma, auth, moderation, io, socketByUser, meByUser, raidSys, teleportTo, nextFreeSlot, invOf, TILE,
   isBusy: (uid) => battlingUsers.has(uid),
   world: {
@@ -276,11 +283,14 @@ const clans = createClans({ app, prisma, auth, io, socketByUser, meByUser });
 const pvp = createPvp({
   biomeOf: (uid) => { const m = meByUser.get(uid); if (!m) return 'field'; return WORLDS[m.world]?.biome || biomeAt(MAP, TILE, m.x, m.y, { town: inClearing(Math.floor(m.x / TILE), Math.floor(m.y / TILE)) }); },
   app, prisma, auth, io, socketByUser, meByUser, loadTeam, durable, markCombat,
+  dexSeen: (uid, sp) => pokedex.mark(uid, sp, 'seen'),
   groupInfo: raidSys.groupInfo, clanSync: clans.refreshClan,
   isBusy: (uid) => battlingUsers.has(uid) || raidSys.inRaid(uid) || !!meByUser.get(uid)?.hidden,
   setBusy: (uid, v) => (v ? battlingUsers.add(uid) : battlingUsers.delete(uid)),
 });
 const voip = createVoip({ socketByUser, groupInfo: raidSys.groupInfo });
+const pokedex = createPokedex({ app, prisma, auth, socketByUser, durable });
+const story = createStory({ prisma, socketByUser, meByUser, durable, nextFreeSlot, dexMark: (uid, sp, k) => pokedex.mark(uid, sp, k), onTeamChanged: (uid) => refreshBuddy(uid) });
 const chat = createChat({ io, socketByUser, meByUser, groupMembers: raidSys.groupMembers, clanMembers: clans.clanMembersOnline, moderation });
 
 io.use(async (socket, next) => {
@@ -314,7 +324,9 @@ io.on('connection', (socket) => {
   chat.bind(socket, u.id);
   pvp.bind(socket, u.id);
   voip.bind(socket, u.id);
-  refreshBuddy(u.id);
+  refreshBuddy(u.id, true);
+  pokedex.load(u.id);
+  story.load(u.id);
 
   socket.emit('players:init', {
     self: me,
@@ -365,8 +377,11 @@ io.on('connection', (socket) => {
       const mine = team.find((p) => p.current_hp > 0);
       const fresh = await prisma.user.findUnique({ where: { id: u.id } });
       if (!mine || socket.disconnected) return releaseWild(w);
-      battle = { team, mine, world: w, wild: makeWild(w.species_id, w.level), inv: invOf(fresh) };
-      socket.emit('battle:start', { biome: WORLDS[w.worldId].biome || biomeAt(MAP, TILE, w.x, w.y, { water: !!w.water }), wild: wildView(battle.wild), mine: mineView(mine), balls: battle.inv, team: team.map(mineView) });
+      const wildMon = makeWild(w.species_id, w.level);
+      if (w.hpMult) { wildMon.maxHp = Math.round(wildMon.maxHp * w.hpMult); wildMon.hp = wildMon.maxHp; }
+      battle = { team, mine, world: w, wild: wildMon, inv: invOf(fresh), noCatch: !!w.story };
+      pokedex.mark(u.id, w.species_id, 'seen'); // Pokédex: visto
+      socket.emit('battle:start', { chief: w.story ? w.name : null, biome: WORLDS[w.worldId].biome || biomeAt(MAP, TILE, w.x, w.y, { water: !!w.water }), wild: wildView(battle.wild), mine: mineView(mine), balls: battle.inv, team: team.map(mineView) });
     } catch (err) {
       console.error('Falha ao iniciar batalha', err.message);
       releaseWild(w);
@@ -416,7 +431,7 @@ io.on('connection', (socket) => {
     if (labTimer) socket.emit('notice', { msg: 'Cura cancelada: você saiu do laboratório.' });
     clearTimeout(labTimer);
     labTimer = null;
-    const ex = exitOf(kind === 'lab' ? LABS[me.world] : GYM);
+    const ex = exitOf(kind === 'lab' ? LABS[me.world] : kind === 'prof' ? PROF_HOUSE : GYM);
     me.hidden = false;
     me.inside = null;
     immuneUntil = Date.now() + IMMUNE_MS;
@@ -427,10 +442,26 @@ io.on('connection', (socket) => {
 
   socket.on('lab:enter', () => { const b = LABS[me.world]; if (b && enterInterior('lab', b)) socket.emit('lab:entered'); });
   socket.on('lab:exit', () => leaveInterior('lab', 'lab:exited'));
+  socket.on('prof:enter', () => { if (me.world === 'town' && enterInterior('prof', PROF_HOUSE)) socket.emit('prof:entered'); });
+  socket.on('prof:exit', () => leaveInterior('prof', 'prof:exited'));
+  socket.on('story:talk', () => story.talk(u.id));
+  socket.on('story:starter', (sp) => { story.starter(u.id, Number(sp)); });
+  socket.on('story:tips', (mode) => { if (['done', 'skip', 'reset'].includes(mode)) story.setTips(u.id, mode); });
+  let chiefLock = 0;
+  socket.on('story:challenge', (cid) => { // tocar no chefe do cenário: luta especial (não dá para capturar)
+    if (battle || starting || acting || me.hidden || raidSys.inRaid(u.id) || pvp.inMatch(u.id) || Date.now() < chiefLock) return;
+    chiefLock = Date.now() + 2500;
+    const r = story.challenge(u.id, String(cid));
+    if (r.error) return socket.emit('notice', { msg: r.error });
+    const c = r.chief;
+    startBattle({ id: -1, worldId: c.world, species_id: c.species, level: c.level, water: false, x: c.tx * TILE, y: c.ty * TILE, busy: false, story: c.id, hpMult: c.hpMult, name: c.name });
+  });
   socket.on('gym:enter', () => { if (me.world === 'route' && enterInterior('gym', GYM)) socket.emit('gym:entered'); });
   socket.on('gym:exit', () => leaveInterior('gym', 'gym:exited'));
   socket.on('gym:travel', (dest) => { // portal do ginásio -> outro mundo
     if (me.inside !== 'gym' || !['town', 'ice', 'lava'].includes(dest)) return;
+    const locked = story.gate(u.id, dest); // Modo História: Gelo e Vulcão abrem ao concluir capítulos
+    if (locked) return socket.emit('notice', { msg: '🔒 ' + locked, big: true });
     immuneUntil = Date.now() + IMMUNE_MS;
     socket.emit('gym:left');
     changeWorld(u.id, dest, ARRIVE.x, ARRIVE.y);
@@ -474,8 +505,9 @@ io.on('connection', (socket) => {
 
       socket.emit('battle:update', { log: r.log, result: r.result, team: teamView(b), forceSwitch: !!b.forceSwitch, balls: b.inv, drops: r.drops || null, capture: r.capture ? { species_id: r.capture.species_id } : null });
       if (r.result) {
-        if (r.result === 'win' || r.result === 'caught') defeatWild(b.world);
+        if (r.result === 'win' || r.result === 'caught') { defeatWild(b.world); if (b.world.story) story.onChiefDefeated(u.id, b.world.story); }
         else releaseWild(b.world);
+        if (!b.world.story) story.onWildEnd(u.id, r.result, b.world.worldId); // Modo História: contadores de captura/vitórias
         immuneUntil = Date.now() + IMMUNE_MS;
         battle = null;
         refreshBuddy(u.id); // evolução no fim da batalha muda o companheiro
@@ -531,6 +563,7 @@ io.on('connection', (socket) => {
       return;
     }
     raidSys.onMove(u.id);
+    story.onMove(u.id, me); // Modo História: chegar a um ponto do mapa
     if (now >= immuneUntil && !battle && !starting && !raidSys.inRaid(u.id)) {
       for (const w of W[me.world].wilds.values()) {
         if (!w.busy && Math.hypot(me.x - w.x, me.y - w.y) < (w.water ? WATER_TOUCH : TOUCH_RADIUS)) { startBattle(w); return; }
@@ -540,6 +573,8 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', async () => {
     clearTimeout(labTimer);
+    story.drop(u.id);
+    pokedex.drop(u.id);
     voip.onDisconnect(u.id); // antes do grupo desfazer, para avisar os pares
     raidSys.onDisconnect(u.id);
     pvp.onDisconnect(u.id);

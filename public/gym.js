@@ -10,6 +10,8 @@ const GYM_PORTALS = [
   { world: 'lava', x: 510, label: 'VULCÃO', sub: 'Lv. 300–500 · Fogo e Terra', color: 0xff6a2a },
 ];
 const GYM_PORTAL_Y = 176;
+// Modo História: Gelo e Vulcão abrem ao concluir capítulos (administradores ignoram; o servidor confere de novo)
+const lockedNow = (w) => !!(STORY_STATE && GATES[w] && !IS_ADMIN && STORY_STATE.chapter - 1 < GATES[w].chapters);
 
 class GymScene extends Phaser.Scene {
   constructor() { super('Gym'); }
@@ -110,6 +112,7 @@ class GymScene extends Phaser.Scene {
     this.add.text(cx, cy - 66, p.label, { fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: '13px', fontStyle: 'bold', color: '#fff', backgroundColor: '#0b1020cc', padding: { x: 7, y: 2 } }).setOrigin(0.5).setDepth(4);
     this.add.text(cx, cy + 62, p.sub, { fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: '10px', color: '#dfe6ff', backgroundColor: '#0b102099', padding: { x: 5, y: 1 } }).setOrigin(0.5).setDepth(4);
     this.portals.push({ ...p, y: cy });
+    if (lockedNow(p.world)) this.add.text(cx, cy, '🔒', { fontSize: '34px' }).setOrigin(0.5).setDepth(5);
   }
 
   // ---------------------------------------------------------------- saída e viagem
@@ -122,6 +125,10 @@ class GymScene extends Phaser.Scene {
 
   travel(p) {
     if (this.traveling || this.leaving) return;
+    if (lockedNow(p.world)) { // bloqueado pela história: avisa (sem repetir a cada quadro)
+      if (this.time.now > (this.lockAt || 0)) { this.lockAt = this.time.now + 3500; toast('🔒 ' + GATES[p.world].msg, true); }
+      return;
+    }
     this.traveling = true;
     this.target = null;
     this.cameras.main.flash(500, 255, 255, 255);

@@ -20,7 +20,7 @@ const RANK = { member: 1, officer: 2, leader: 3 };
 const QUEUE_MAX_MS = 10 * 60000; // sem adversário depois disso, a fila é cancelada
 const QUEUE_TICK_MS = 1500;
 
-module.exports = function createPvp({ biomeOf, app, prisma, auth, io, socketByUser, meByUser, groupInfo, isBusy, setBusy, markCombat, loadTeam, durable, clanSync }) {
+module.exports = function createPvp({ biomeOf, app, prisma, auth, io, socketByUser, meByUser, groupInfo, isBusy, setBusy, markCombat, loadTeam, durable, clanSync, dexSeen }) {
   const inMatch = new Map(); // uid -> match
   const challenges = new Map(); // uid desafiado -> { id, mode, from, to, exp }
   const recent = new Map(); // "a-b" -> [timestamps] (anti-farm)
@@ -204,6 +204,7 @@ module.exports = function createPvp({ biomeOf, app, prisma, auth, io, socketByUs
         duels: pa.map((p, i) => ({ n: i, p: [p, pb[i]], over: false, winner: null, timer: null, deadline: 0 })),
       };
       ids.forEach((id) => inMatch.set(id, match));
+      match.duels.forEach((d) => d.p.forEach((pl, k) => d.p[1 - k].team.forEach((mn) => dexSeen?.(pl.uid, mn.species_id)))); // Pokédex: viu os Pokémon do adversário
       match.duels.forEach((d) => pushState(match, d, [{ msg: `⚔ ${d.p[0].name} contra ${d.p[1].name}! Todos lutam no Lv.${LEVEL} — seus Pokémon não correm risco.` }]));
       match.duels.forEach((d) => armTimer(match, d));
     } catch (e) {

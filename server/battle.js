@@ -207,6 +207,7 @@ function resolveTurn(b, type) {
     }
   } else if (type.startsWith('ball:')) {
     const kind = type.slice(5);
+    if (b.noCatch) return { log: [{ msg: 'Não dá para capturar o Pokémon de um chefe de cenário!', wildHp: w.hp, mine: mineView(my) }], result: null, capture }; // Modo História
     const ball = BALLS[kind];
     if (!ball || !(b.inv[kind] > 0)) return { log: [{ msg: 'Você não tem essa Pokébola!', wildHp: w.hp, mine: mineView(my) }], result: null, capture };
     b.inv[kind]--;

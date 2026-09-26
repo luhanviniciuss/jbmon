@@ -616,3 +616,63 @@ textarea.af { resize: vertical; }
 .qinfo { font-size: 13px; color: var(--muted); }
 .qinfo span { font-weight: 800; color: var(--text); font-size: 16px; }
 #qJoin, #qCancel { width: 100%; min-height: 48px; }
+
+/* ---------- Pokédex ---------- */
+#dex { overflow: hidden; }
+.dexstat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.dexstat div { padding: 10px 6px; border-radius: 12px; background: rgba(255,255,255,.06); border: 1px solid var(--line); text-align: center; display: flex; flex-direction: column; }
+.dexstat b { font-size: 22px; } .dexstat span { font-size: 11px; color: var(--muted); }
+.dexbar { height: 8px; border-radius: 8px; background: rgba(255,255,255,.12); overflow: hidden; }
+.dexbar i { display: block; height: 100%; background: linear-gradient(90deg, var(--blue), var(--green)); border-radius: 8px; }
+.dexsearch { width: 100%; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--line); background: rgba(0,0,0,.28); color: var(--text); font: 500 var(--font-size, 15px) var(--font); outline: none; }
+.dexgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.dexcard { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,.06); color: var(--text); cursor: pointer; font: 600 12px var(--font); min-height: 44px; }
+.dexcard:hover { background: rgba(255,255,255,.14); }
+.dexcard img { width: 64px; height: 64px; image-rendering: pixelated; }
+.dexcard small { color: var(--muted); font-size: 10px; }
+.dexcard b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; text-transform: capitalize; }
+.dexcard.seen img { filter: brightness(0) opacity(.55); }
+.dexcard.seen b { color: var(--muted); }
+.dextabs button { flex: 1 1 0; }
+#dexDetail { position: absolute; left: 0; right: 0; bottom: 0; top: 64px; z-index: 5; background: rgba(14, 19, 38, .98); padding: 14px 18px calc(18px + var(--safe-b)); overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+#dexDetail[hidden] { display: none; }
+#dexDetail h3 { margin: 0; font-size: 22px; text-transform: capitalize; } #dexDetail h3 small { color: var(--muted); font-size: 14px; }
+.dexhero { display: grid; place-items: center; padding: 10px; border-radius: 18px; background: radial-gradient(circle at 50% 60%, color-mix(in srgb, var(--rc, #4da3ff) 35%, transparent), transparent 70%), rgba(255,255,255,.05); border: 1px solid var(--line); }
+.dexhero img { width: 150px; height: 150px; image-rendering: pixelated; filter: drop-shadow(0 8px 6px rgba(0,0,0,.4)); }
+.dexhero.seen img { filter: brightness(0) opacity(.6); }
+.dexchips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.dexdesc { margin: 0; line-height: 1.45; }
+.dexinfo { padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid var(--line); font-size: 14px; line-height: 1.5; }
+.dexinfo > b { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 4px; }
+.dexinfo small { display: block; color: var(--muted); margin-top: 6px; }
+.dexinfo .stat { display: grid; grid-template-columns: 56px 1fr 34px; gap: 8px; align-items: center; margin: 3px 0; font-size: 12px; }
+.dexinfo .bar { height: 7px; border-radius: 7px; background: rgba(255,255,255,.12); overflow: hidden; } .dexinfo .bar i { display: block; height: 100%; background: var(--green); }
+.graytxt { color: var(--muted); }
+
+/* ---------- Modo História: marcador, diário, diálogo e dicas ---------- */
+.quest-chip { border: 1px solid var(--line); color: var(--text); font: 700 13px var(--font); cursor: pointer; pointer-events: auto; padding: 8px 14px; min-height: 40px; max-width: min(340px, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; text-align: left; }
+.quest-chip[hidden] { display: none; }
+.chap { grid-template-columns: 24px minmax(0, 1fr) auto; } .chap.done { opacity: .75; } .chap.lock { opacity: .55; } .chap.now { border-color: var(--gold); }
+.chap .chi { text-align: center; } .chap em { font-style: normal; font-size: 20px; }
+.stepq { display: grid; grid-template-columns: 22px 1fr; gap: 8px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid transparent; }
+.stepq.active { background: rgba(255, 207, 92, .1); border-color: rgba(255, 207, 92, .5); }
+.stepq.done { opacity: .6; } .stepq small { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; line-height: 1.4; }
+.stepq .cmp { color: var(--gold); font-weight: 700; }
+.sbar { height: 7px; border-radius: 7px; background: rgba(255,255,255,.12); overflow: hidden; margin-top: 6px; } .sbar i { display: block; height: 100%; background: var(--gold); border-radius: 7px; }
+.rewardq { padding: 10px 12px; border-radius: 12px; background: rgba(61, 220, 151, .1); border: 1px solid rgba(61, 220, 151, .4); font-size: 13px; }
+
+.dialog { position: fixed; z-index: 60; left: 50%; bottom: calc(14px + var(--safe-b)); transform: translateX(-50%); width: min(640px, calc(100vw - 20px)); padding: 14px 16px 16px; border-radius: 20px; animation: rise .3s both; }
+.dialog[hidden] { display: none; }
+.dlg-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; } .dlg-face { font-size: 30px; }
+#dlgText { margin: 0 0 12px; font-size: 16px; line-height: 1.5; min-height: 48px; }
+.dlg-choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.dlg-choices .btn { min-height: 44px; display: inline-flex; align-items: center; gap: 6px; }
+.dlg-choices .btn img { width: 34px; height: 34px; image-rendering: pixelated; margin: -4px 0; }
+
+.tips-wrap { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 12px; background: rgba(5, 8, 18, .75); }
+.tips-wrap[hidden] { display: none; }
+.tips-card { width: min(440px, 100%); padding: 18px; border-radius: 22px; display: flex; flex-direction: column; gap: 10px; text-align: center; animation: rise .3s both; }
+.tips-top { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 13px; }
+.tips-icon { font-size: 54px; line-height: 1; } .tips-card h3 { margin: 0; font-size: 22px; } .tips-card p { margin: 0; line-height: 1.55; color: #dfe4ff; min-height: 96px; }
+.tips-dots { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; } .tips-dots i { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,.2); } .tips-dots i.on { background: var(--gold); }
+.tips-nav { display: flex; gap: 10px; justify-content: space-between; } .tips-nav .btn { flex: 1; min-height: 46px; }

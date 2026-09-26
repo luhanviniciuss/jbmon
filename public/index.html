@@ -37,6 +37,7 @@
       <div class="chip glass plain" title="Pokébolas"><span class="ball sm"></span><b id="balls">0</b></div>
       <button class="chip glass boss-chip" id="bossChip" hidden></button>
       <button class="chip glass queue-chip" id="queueChip" hidden></button>
+      <button class="chip glass quest-chip" id="questChip" hidden title="Diário de Missões"></button>
       <button class="chip glass voice-chip" id="voiceChip" hidden></button>
     </div>
 
@@ -46,6 +47,7 @@
       <button class="fab glass" id="bagBtn" aria-label="Abrir bolsa"><span class="ic">🎒</span><span class="lbl">Bolsa</span><kbd>B</kbd></button>
       <button class="fab glass" id="groupBtn" aria-label="Abrir grupo"><span class="ic">👥</span><span class="lbl">Grupo</span><kbd>G</kbd></button>
       <button class="fab glass" id="arenaBtn" aria-label="Arena: clã e PvP"><span class="ic">⚔</span><span class="lbl">Arena</span><kbd>K</kbd></button>
+      <button class="fab glass" id="dexBtn" aria-label="Pokédex"><span class="ic">📖</span><span class="lbl">Dex</span><kbd>O</kbd></button>
       <button class="fab glass" id="adminBtn" hidden aria-label="Painel de administração"><span class="ic">🛡</span><span class="lbl">Admin</span></button>
       <button class="fab glass" id="chatBtn" aria-label="Abrir chat"><span class="ic">💬</span><span class="lbl">Chat</span><kbd>Enter</kbd><i class="badge" id="chatBadge" hidden>0</i></button>
     </div>
@@ -77,6 +79,38 @@
     <span id="inviteTxt"></span>
     <button class="btn small" id="invYes">Aceitar</button>
     <button class="btn small ghost" id="invNo">Recusar</button>
+  </div>
+
+  <!-- Pokédex -->
+  <aside id="dex" class="drawer glass" aria-hidden="true">
+    <header><h2>📖 Pokédex</h2><button class="close" id="closeDex" aria-label="Fechar">✕</button></header>
+    <div id="dexBody" class="list"></div>
+    <div id="dexDetail" hidden></div>
+  </aside>
+
+  <!-- Diário de Missões (Modo História) -->
+  <aside id="story" class="drawer glass" aria-hidden="true">
+    <header><h2>📜 Diário de Missões</h2><button class="close" id="closeStory" aria-label="Fechar">✕</button></header>
+    <div id="storyBody" class="list"></div>
+  </aside>
+
+  <!-- Diálogo (Professor Carvalho, avisos de capítulo) -->
+  <div id="dialog" class="dialog glass" hidden>
+    <div class="dlg-head"><span class="dlg-face" id="dlgFace">🧑‍🔬</span><b id="dlgName">Professor Carvalho</b></div>
+    <p id="dlgText"></p>
+    <div class="dlg-choices" id="dlgChoices"></div>
+  </div>
+
+  <!-- Dicas para quem chega (podem ser puladas) -->
+  <div id="tips" class="tips-wrap" hidden>
+    <div class="tips-card glass" role="dialog" aria-label="Dicas do jogo">
+      <div class="tips-top"><span id="tipsCount"></span><button class="btn small ghost" id="tipsSkip">Pular dicas</button></div>
+      <div class="tips-icon" id="tipsIcon"></div>
+      <h3 id="tipsTitle"></h3>
+      <p id="tipsText"></p>
+      <div class="tips-dots" id="tipsDots"></div>
+      <div class="tips-nav"><button class="btn small ghost" id="tipsPrev">◀ Voltar</button><button class="btn small primary" id="tipsNext">Próxima ▶</button></div>
+    </div>
   </div>
 
   <!-- Configurações -->
@@ -199,12 +233,16 @@
   <script src="/map.js"></script>
   <script src="/species.js"></script>
   <script src="/items.js"></script>
+  <script src="/story-data.js"></script>
   <script src="/lab.js"></script>
   <script src="/gym.js"></script>
+  <script src="/prof.js"></script>
   <script src="/game.js"></script>
   <script src="/fx.js"></script>
   <script src="/battle.js"></script>
   <script src="/arena.js"></script>
+  <script src="/dex.js"></script>
+  <script src="/story.js"></script>
   <script src="/settings.js"></script>
   <script src="/admin.js"></script>
 </body>

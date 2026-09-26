@@ -174,6 +174,7 @@ module.exports = function registerAdmin(ctx) {
     const slot = await nextFreeSlot(prisma, u.id);
     await prisma.pokemon.create({ data: { user_id: u.id, species_id, level, hp: st.hp, attack: st.attack, defense: st.defense, current_hp: st.hp, slot } });
     say(u.id, `🎁 Você recebeu um ${SPECIES[species_id].name} Lv.${level}${slot ? '' : ' (foi para o box)'}!`);
+    ctx.afterGive?.(u.id);
     await audit(req.admin, 'give-pokemon', u.username, { species: SPECIES[species_id].name, level });
     res.json({ ok: true, inTeam: !!slot });
   });

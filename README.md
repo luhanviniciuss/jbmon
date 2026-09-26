@@ -93,6 +93,20 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 - **Auditoria**: toda ação fica na tabela `AdminLog` (quem, o quê, alvo e detalhes).
 - **Selo ADM** no chat e nomes reservados (`admin`, `moderador`, `gm`, `sistema`…) que jogadores comuns não conseguem registrar.
 
+## Pokédex
+- Botão **📖 Dex** (atalho **O**). Duas abas: **Capturados** (sprite colorido, tipos, raridade, descrição, status base, evolução, onde encontrar e o seu maior nível) e **Vistos** (só a silhueta e o nome cinza: já enfrentou mas ainda não capturou). Tem busca por nome e barra de progresso (188 espécies). Toque num cartão para ver os detalhes.
+- O **servidor registra tudo sozinho** (tabela `user_pokedex`, `server/pokedex.js`): "visto" ao começar uma batalha (selvagem, chefe, raid ou PvP); "capturado" ao capturar, evoluir, ganhar do Professor/admin ou já possuir o Pokémon (contas antigas são sincronizadas ao entrar). Aparece o aviso "📖 Pokédex: capturado — Nome". Os dados e descrições ficam no jogo (sem depender de API externa).
+
+## Modo História (campanha)
+- **Diário de Missões** (chip 📜 no topo, com **bússola** ↗ e distância até o objetivo; toque para abrir). O progresso é guardado por jogador (tabela `player_progress`); as definições ficam em `public/story-data.js`.
+- **Capítulo 1 · O Despertar na Rota 1**: falar com o **Professor Carvalho** (casa da esquerda da **Cidade**, chegando pelo Ginásio), **escolher o inicial** (Bulbasaur, Charmander ou Squirtle, entregue como presente) e **capturar o primeiro Pokémon selvagem** (quem já capturou antes cumpre sozinho). Recompensa: 10 Pokébolas + 5 Bolotas.
+- **Capítulo 2 · A Trilha Congelada**: entrar no Bioma de Gelo, derrotar 5 Pokémon selvagens de lá e vencer o **Chefe Gélido** (Lapras Lv.90 com HP ×1,5, no extremo norte). Recompensa: 5 Great Balls + 20 Bolotas + 5 Fragmentos.
+- **Capítulo 3 · O Desafio Vulcânico**: entrar no Vulcão, **chegar ao topo** e vencer o **Líder Vulcânico** (Arcanine Lv.320 com HP ×1,5). Recompensa: 10 Great Balls + 30 Bolotas + 15 Fragmentos.
+- **Chefes de cenário**: aparecem no mapa com o seu Pokémon; encostar neles desafia (só quando a missão está ativa). É uma luta especial: **não dá para capturar** o Pokémon do chefe. Perder leva ao Centro, como sempre.
+- **Bloqueios**: o **Bioma de Gelo** só abre depois de concluir o Capítulo 1 e o **Vulcão** depois do Capítulo 2 (os portais do Ginásio mostram 🔒; administradores ignoram). A Cidade é livre. Tudo é conferido no servidor.
+- **Dicas para quem chega**: na primeira vez, 11 cartões (movimento, batalhas, captura, equipe, cura, craft, mundos, lendários/grupos, arena/clãs, chat, Pokédex/missões) com **"Pular dicas"** a qualquer momento (fica salvo). Dá para **rever** no Diário, em ⚙ ou com o Professor.
+- A casa do Professor é um interior como o laboratório (`ProfScene`, `public/prof.js`): você anda dentro, toca no Professor ou na mesa dos iniciais e conversa.
+
 ## Ginásio e mundos extras
 - **Ginásio** (Rota, 20 tiles a leste do Centro Pokémon, por uma estrada livre de grama alta): pisar na porta leva ao **salão do ginásio** (`GymScene`, `public/gym.js`), com três **portais**: **Cidade**, **Bioma de Gelo** e **Vulcão**. Caminhe até um portal para viajar; a porta verde de baixo volta à Rota.
 - **Mundos** (cada um com 100x100 tiles, gerados por `generateMap(mundo)` em `public/map.js`, iguais no servidor e no cliente):

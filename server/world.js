@@ -22,14 +22,31 @@ module.exports = function createWorld({ io, id, MAP, newId }) {
   const cfg = def.wild || (isRoute ? { land: 70, water: 24, min: 2, base: 1, scale: 0.9, cap: 60 } : null);
   const tables = isRoute ? { land: WILD_TABLE, water: WATER_TABLE } : WORLD_TABLES[id] || { land: [], water: [] };
 
+  // Só nasce Pokémon onde o jogador consegue chegar: rios de lava, lagos e árvores podem isolar pedaços do mapa, e um selvagem
+  // preso do outro lado seria impossível de alcançar. Busca em largura a partir do ponto de chegada do mundo.
+  const start = isRoute ? [50, 50] : [50, 49];
+  const reach = MAP.map((row) => row.map(() => false));
+  {
+    const q = [start];
+    reach[start[1]][start[0]] = true;
+    for (let h = 0; h < q.length; h++) {
+      const [x, y] = q[h];
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy, t = MAP[ny]?.[nx];
+        if (t === undefined || t === 2 || t === 3 || reach[ny][nx]) continue;
+        reach[ny][nx] = true;
+        q.push([nx, ny]);
+      }
+    }
+  }
   const grass = [];
-  const shore = []; // tiles de água encostados em terra: onde os Pokémon aquáticos vivem
+  const shore = []; // tiles de água encostados em terra ALCANÇÁVEL: onde os Pokémon aquáticos vivem
   MAP.forEach((row, y) => row.forEach((t, x) => {
-    if (t === 4 && !noEncounter(x, y)) grass.push([x, y]);
+    if (t === 4 && !noEncounter(x, y) && reach[y][x]) grass.push([x, y]);
     if (t !== 2) return;
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
       const n = MAP[y + dy]?.[x + dx];
-      if (n === 0 || n === 1 || n === 4) { shore.push([x, y]); return; }
+      if ((n === 0 || n === 1 || n === 4) && reach[y + dy][x + dx]) { shore.push([x, y]); return; }
     }
   }));
 

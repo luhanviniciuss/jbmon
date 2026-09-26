@@ -133,18 +133,28 @@ const Battle = (() => {
     inv = d.balls;
     team = d.team || [];
     const foe = resetField('wild');
+    $('battle').dataset.biome = d.biome || 'field';
     foe.src = spriteUrl(d.wild.species_id);
     setFoe(d.wild);
     setMine(d.mine);
     lock(true);
     const sp = SPECIES[d.wild.species_id];
-    msg(`Um ${sp.name} selvagem apareceu!${sp.rarity === 'common' ? '' : ' ✦ ' + rarityOf(d.wild.species_id).label}`);
+    msg(`Um ${sp.name} selvagem apareceu! · ${Fx.BIOME_NAMES[d.biome] || 'Campo'}${sp.rarity === 'common' ? '' : ' ✦ ' + rarityOf(d.wild.species_id).label}`);
     setTimeout(() => lock(false), 1300);
   }
 
   // Anima uma lista de linhas do log. `hpKey` = campo do HP do inimigo; `isMine(e)` decide se o alvo sou eu.
   async function playLog(log, hpKey, mineOf) {
     for (const e of log) {
+      if (e.atk) { // efeito visual do golpe (tipo vem do servidor)
+        msg(e.msg);
+        const mineAtt = e.atk.by === 'me';
+        if (!(mode === 'raid' && !mineAtt && e.target !== MY_ID)) { // raid: golpe do boss em outro jogador não passa por aqui
+          await Fx.attack($('fxCanvas'), e.atk, $(mineAtt ? 'myImg' : 'foeImg'), $(mineAtt ? 'foeImg' : 'myImg'), {
+            crit: /crítico/.test(e.msg), dmg: +(/\(-(\d+)\)/.exec(e.msg)?.[1] || 0), eff: e.eff, lunge: !(mode === 'raid' && mineAtt && e.atk.actor !== MY_ID),
+          });
+        }
+      }
       if (e.fx === 'ball') {
         const fx = $('ballFx');
         fx.className = 'ball t-' + (e.kind || 'poke');
@@ -175,7 +185,7 @@ const Battle = (() => {
       }
       if (e.fx === 'exhaust') $('foeImg').classList.add('exhausted');
       if (e.fx === 'escape') { $('foeImg').classList.remove('in-ball'); $('foeImg').classList.add('released'); }
-      await sleep(e.fx === 'caught' || e.fx === 'evolve' || e.fx === 'exhaust' ? 1500 : 1050);
+      await sleep(e.fx === 'caught' || e.fx === 'evolve' || e.fx === 'exhaust' ? 1500 : e.atk ? 650 : 1050);
       $('myImg').classList.remove('evolved');
     }
   }
@@ -211,6 +221,7 @@ const Battle = (() => {
     inv = s.you.balls;
     team = s.you.team || [];
     const foe = resetField('raid');
+    $('battle').dataset.biome = 'legend';
     foe.src = spriteUrl(s.boss.species_id);
     setFoe(s.boss);
     setMine(s.you.mine);

@@ -230,6 +230,7 @@ const Arena = (() => {
       window.worldScene?.player?.setVelocity(0, 0);
       ['drawer', 'bag', 'group', 'arena'].forEach((id) => $(id).classList.remove('open'));
       $('pvpBattle').hidden = false;
+      $('pvpBattle').dataset.biome = s.biome || 'field';
       $('pvContinue').hidden = true;
       $('pvMy').dataset.sp = ''; $('pvFoe').dataset.sp = '';
       $('pvLabel').textContent = s.mode === 'clan' ? '🏰 Guerra de clãs' : s.mode === 'group' ? '👥 PvP de grupo' : '🥊 PvP solo';
@@ -248,11 +249,15 @@ const Arena = (() => {
     if (first) { lock(true); showActions(); }
     for (const e of s.log) {
       msg(e.msg);
+      if (e.atk && !first) {
+        const mineAtt = e.atk.by === 'me';
+        await Fx.attack($('pvFx'), e.atk, $(mineAtt ? 'pvMy' : 'pvFoe'), $(mineAtt ? 'pvFoe' : 'pvMy'), { crit: /crítico/.test(e.msg), dmg: +(/\(-(\d+)\)/.exec(e.msg)?.[1] || 0), eff: e.eff });
+      }
       if (/usou|errou/.test(e.msg) && !first) { // sacode quem levou o golpe
         const meNamed = e.msg.includes('de ' + s.you.name + ' usou');
         if (e.eff !== undefined && e.eff !== null) hit($(meNamed ? 'pvFoe' : 'pvMy'));
       }
-      await sleep(e.fx === 'switch' ? 700 : 950);
+      await sleep(e.fx === 'switch' ? 700 : e.atk ? 600 : 950);
     }
     if (s.over) {
       lock(true);

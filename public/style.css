@@ -438,7 +438,7 @@ textarea.af { resize: vertical; }
 .list .btn.small { align-self: flex-start; }
 
 /* batalha PvP */
-.battle.pvp { background: linear-gradient(#3a2a6e 0, #7a5cc8 46%, #4a3b7a 46%, #2c2350 100%); }
+
 .pv-top { position: absolute; z-index: 4; right: 12px; top: calc(12px + var(--safe-t)); display: flex; gap: 10px; align-items: center; font-weight: 800; font-size: 13px; padding: 6px 12px; border-radius: 999px; background: rgba(0,0,0,.35); color: #fff; }
 .pv-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
 .pips { display: inline-flex; gap: 4px; }
@@ -490,3 +490,63 @@ textarea.af { resize: vertical; }
 
 /* dentro do laboratório do Centro Pokémon */
 .in-lab .hud-bottom { display: none; }
+
+/* ---------- Efeitos de golpe e dano flutuante ---------- */
+.fxc { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 6; }
+.dmgpop { position: absolute; z-index: 7; transform: translate(-50%, 0); font: 900 26px var(--font); color: #fff; text-shadow: 0 2px 0 #0b1020, 0 0 8px rgba(0,0,0,.6); pointer-events: none; animation: dmgUp 1.1s ease-out forwards; }
+.dmgpop.super { color: #ffb02e; font-size: 30px; }
+.dmgpop.weak { color: #c5cbe6; font-size: 20px; }
+.dmgpop.crit { color: #ffe14d; font-size: 36px; text-shadow: 0 2px 0 #b02338, 0 0 14px #ff5a28; }
+@keyframes dmgUp { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.6); } 15% { opacity: 1; transform: translate(-50%, -6px) scale(1.15); } 100% { opacity: 0; transform: translate(-50%, -54px) scale(1); } }
+
+/* ---------- Cenários de batalha por bioma (o servidor diz onde a luta acontece) ---------- */
+.battle::before, .battle::after { content: ''; position: absolute; left: 0; right: 0; pointer-events: none; z-index: 0; }
+.battle::before { bottom: 54%; height: clamp(60px, 15vh, 130px); background-repeat: repeat-x; background-position: left bottom; background-size: auto 100%; }
+.battle::after { top: 46%; bottom: 0; }
+.battle > .b-field, .battle > .b-panel { position: relative; z-index: 1; }
+.battle > .b-panel { z-index: 2; }
+
+/* campo (padrão) */
+.battle[data-biome="field"]::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20100'%20preserveAspectRatio%3D'none'%3E%3Cpath%20d%3D'M0%20100V58Q50%2018%20100%2052T200%2046V100Z'%20fill%3D'%2357b35f'%2F%3E%3Cpath%20d%3D'M0%20100V80Q60%2048%20120%2076T200%2070V100Z'%20fill%3D'%234aa553'%2F%3E%3C%2Fsvg%3E"); }
+.battle[data-biome="field"]::after { background: radial-gradient(ellipse at 20% 0, rgba(255,255,255,.18), transparent 50%); }
+
+/* grama alta */
+.battle[data-biome="meadow"] { background: linear-gradient(#63b6ff 0, #cbeaff 46%, #56b85c 46%, #2f8f45 100%); }
+.battle[data-biome="meadow"]::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20100'%20preserveAspectRatio%3D'none'%3E%3Cpath%20d%3D'M0%20100V62%20L3%2038%20L7%2062%20L13%2050%20L17%2062%20L23%2038%20L27%2062%20L33%2050%20L37%2062%20L43%2038%20L47%2062%20L53%2050%20L57%2062%20L63%2038%20L67%2062%20L73%2050%20L77%2062%20L83%2038%20L87%2062%20L93%2050%20L97%2062%20L103%2038%20L107%2062%20L113%2050%20L117%2062%20L123%2038%20L127%2062%20L133%2050%20L137%2062%20L143%2038%20L147%2062%20L153%2050%20L157%2062%20L163%2038%20L167%2062%20L173%2050%20L177%2062%20L183%2038%20L187%2062%20L193%2050%20L197%2062%20L200%2062V100Z'%20fill%3D'%232f8f45'%2F%3E%3Crect%20y%3D'84'%20width%3D'200'%20height%3D'16'%20fill%3D'%233aa352'%2F%3E%3C%2Fsvg%3E"); }
+.battle[data-biome="meadow"]::after { background:
+  radial-gradient(circle, #fff 0 2px, transparent 2.6px) 0 0 / 38px 26px,
+  radial-gradient(circle, #ffd54a 0 2px, transparent 2.6px) 19px 13px / 46px 34px,
+  radial-gradient(circle, #ff8fb8 0 2px, transparent 2.6px) 8px 20px / 57px 30px,
+  repeating-linear-gradient(90deg, rgba(20,90,40,.16) 0 3px, transparent 3px 12px); }
+
+/* floresta */
+.battle[data-biome="forest"] { background: linear-gradient(#2a6b58 0, #8fcfa8 46%, #2f7a3c 46%, #1c4d29 100%); }
+.battle[data-biome="forest"]::before { height: clamp(90px, 21vh, 180px); background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20100'%20preserveAspectRatio%3D'none'%3E%3Cpolygon%20points%3D'-6%2C100%2010%2C18%2026%2C100'%20fill%3D'%231d5a35'%2F%3E%3Cpolygon%20points%3D'22%2C100%2038%2C26%2054%2C100'%20fill%3D'%231d5a35'%2F%3E%3Cpolygon%20points%3D'50%2C100%2066%2C34%2082%2C100'%20fill%3D'%231d5a35'%2F%3E%3Cpolygon%20points%3D'78%2C100%2094%2C18%20110%2C100'%20fill%3D'%231d5a35'%2F%3E%3Cpolygon%20points%3D'106%2C100%20122%2C26%20138%2C100'%20fill%3D'%231d5a35'%2F%3E%3Cpolygon%20points%3D'134%2C100%20150%2C34%20166%2C100'%20fill%3D'%231d5a35'%2F%3E%3Cpolygon%20points%3D'162%2C100%20178%2C18%20194%2C100'%20fill%3D'%231d5a35'%2F%3E%3Cpolygon%20points%3D'190%2C100%20206%2C26%20222%2C100'%20fill%3D'%231d5a35'%2F%3E%3Cpolygon%20points%3D'2%2C100%2020%2C28%2038%2C100'%20fill%3D'%23123b25'%2F%3E%3Cpolygon%20points%3D'30%2C100%2048%2C16%2066%2C100'%20fill%3D'%23123b25'%2F%3E%3Cpolygon%20points%3D'58%2C100%2076%2C4%2094%2C100'%20fill%3D'%23123b25'%2F%3E%3Cpolygon%20points%3D'86%2C100%20104%2C22%20122%2C100'%20fill%3D'%23123b25'%2F%3E%3Cpolygon%20points%3D'114%2C100%20132%2C10%20150%2C100'%20fill%3D'%23123b25'%2F%3E%3Cpolygon%20points%3D'142%2C100%20160%2C28%20178%2C100'%20fill%3D'%23123b25'%2F%3E%3Cpolygon%20points%3D'170%2C100%20188%2C16%20206%2C100'%20fill%3D'%23123b25'%2F%3E%3Crect%20y%3D'92'%20width%3D'200'%20height%3D'8'%20fill%3D'%23123b25'%2F%3E%3C%2Fsvg%3E"); }
+.battle[data-biome="forest"]::after { top: 0; background: repeating-linear-gradient(105deg, rgba(255,255,190,.11) 0 26px, transparent 26px 96px); mix-blend-mode: screen; animation: beams 9s ease-in-out infinite alternate; }
+@keyframes beams { from { opacity: .55; } to { opacity: 1; } }
+
+/* praia */
+.battle[data-biome="beach"] { background: linear-gradient(#6cc7ff 0, #dff4ff 46%, #f3dda0 46%, #e2c078 100%); }
+.battle[data-biome="beach"]::before { height: clamp(50px, 12vh, 100px); background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20100'%20preserveAspectRatio%3D'none'%3E%3Crect%20y%3D'38'%20width%3D'200'%20height%3D'62'%20fill%3D'%232f9fe0'%2F%3E%3Crect%20y%3D'38'%20width%3D'200'%20height%3D'8'%20fill%3D'%238fd8ff'%2F%3E%3Cpath%20d%3D'M0%2060Q12%2054%2025%2060T50%2060T75%2060T100%2060T125%2060T150%2060T175%2060T200%2060'%20fill%3D'none'%20stroke%3D'%23ffffff'%20stroke-opacity%3D'.55'%20stroke-width%3D'2'%2F%3E%3Cpath%20d%3D'M0%2078Q12%2072%2025%2078T50%2078T75%2078T100%2078T125%2078T150%2078T175%2078T200%2078'%20fill%3D'none'%20stroke%3D'%23ffffff'%20stroke-opacity%3D'.4'%20stroke-width%3D'2'%2F%3E%3Cpath%20d%3D'M0%2038Q40%2030%2080%2036T160%2034T200%2038V44H0Z'%20fill%3D'%237a6a48'%20opacity%3D'.0'%2F%3E%3C%2Fsvg%3E"); background-size: auto 100%; animation: waves 6s linear infinite; }
+@keyframes waves { to { background-position: -200px bottom; } }
+.battle[data-biome="beach"]::after { background: radial-gradient(circle, rgba(150,105,45,.35) 0 1px, transparent 1.6px) 0 0 / 14px 11px, radial-gradient(circle, rgba(255,255,255,.3) 0 1px, transparent 1.6px) 6px 5px / 19px 15px; }
+
+/* lago (o chão é água) */
+.battle[data-biome="lake"] { background: linear-gradient(#8fc7f2 0, #d8efff 46%, #2f86d0 46%, #14508f 100%); }
+.battle[data-biome="lake"]::before { height: clamp(70px, 17vh, 140px); background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20100'%20preserveAspectRatio%3D'none'%3E%3Cpolygon%20points%3D'0%2C100%2030%2C30%2060%2C100'%20fill%3D'%237c93b8'%2F%3E%3Cpolygon%20points%3D'40%2C100%2085%2C14%20130%2C100'%20fill%3D'%236b83aa'%2F%3E%3Cpolygon%20points%3D'110%2C100%20150%2C34%20190%2C100'%20fill%3D'%237c93b8'%2F%3E%3Cpolygon%20points%3D'160%2C100%20190%2C52%20220%2C100'%20fill%3D'%236b83aa'%2F%3E%3Cpolygon%20points%3D'85%2C14%2076%2C34%2094%2C34'%20fill%3D'%23fff'%20opacity%3D'.85'%2F%3E%3Crect%20y%3D'90'%20width%3D'200'%20height%3D'10'%20fill%3D'%233f8fc7'%2F%3E%3C%2Fsvg%3E"); }
+.battle[data-biome="lake"]::after { background: repeating-linear-gradient(180deg, rgba(255,255,255,.16) 0 2px, transparent 2px 15px); animation: shimmer 5s linear infinite; }
+@keyframes shimmer { to { background-position: 0 15px; } }
+.battle[data-biome="lake"] .platform { background: radial-gradient(ellipse at center, rgba(255,255,255,.35), rgba(255,255,255,0) 70%); }
+
+/* praça do Centro Pokémon */
+.battle[data-biome="town"] { background: linear-gradient(#7fc4ff 0, #d9efff 46%, #c9ccd8 46%, #9aa0b8 100%); }
+.battle[data-biome="town"]::before { height: clamp(60px, 14vh, 120px); background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20100'%20preserveAspectRatio%3D'none'%3E%3Crect%20x%3D'4'%20y%3D'56'%20width%3D'34'%20height%3D'44'%20fill%3D'%23e9edf9'%2F%3E%3Crect%20x%3D'1'%20y%3D'48'%20width%3D'40'%20height%3D'10'%20fill%3D'%23e53950'%2F%3E%3Crect%20x%3D'9'%20y%3D'66'%20width%3D'7'%20height%3D'9'%20fill%3D'%238fd3ff'%2F%3E%3Crect%20x%3D'21'%20y%3D'66'%20width%3D'7'%20height%3D'9'%20fill%3D'%238fd3ff'%2F%3E%3Crect%20x%3D'44'%20y%3D'70'%20width%3D'42'%20height%3D'30'%20fill%3D'%23e9edf9'%2F%3E%3Crect%20x%3D'41'%20y%3D'62'%20width%3D'48'%20height%3D'10'%20fill%3D'%233d8bff'%2F%3E%3Crect%20x%3D'49'%20y%3D'80'%20width%3D'7'%20height%3D'9'%20fill%3D'%238fd3ff'%2F%3E%3Crect%20x%3D'61'%20y%3D'80'%20width%3D'7'%20height%3D'9'%20fill%3D'%238fd3ff'%2F%3E%3Crect%20x%3D'73'%20y%3D'80'%20width%3D'7'%20height%3D'9'%20fill%3D'%238fd3ff'%2F%3E%3Crect%20x%3D'92'%20y%3D'50'%20width%3D'30'%20height%3D'50'%20fill%3D'%23e9edf9'%2F%3E%3Crect%20x%3D'89'%20y%3D'42'%20width%3D'36'%20height%3D'10'%20fill%3D'%23e53950'%2F%3E%3Crect%20x%3D'97'%20y%3D'60'%20width%3D'7'%20height%3D'9'%20fill%3D'%238fd3ff'%2F%3E%3Crect%20x%3D'109'%20y%3D'60'%20width%3D'7'%20height%3D'9'%20fill%3D'%238fd3ff'%2F%3E%3Crect%20x%3D'128'%20y%3D'64'%20width%3D'38'%20height%3D'36'%20fill%3D'%23e9edf9'%2F%3E%3Crect%20x%3D'125'%20y%3D'56'%20width%3D'44'%20height%3D'10'%20fill%3D'%23ffb02e'%2F%3E%3Crect%20x%3D'133'%20y%3D'74'%20width%3D'7'%20height%3D'9'%20fill%3D'%238fd3ff'%2F%3E%3Crect%20x%3D'145'%20y%3D'74'%20width%3D'7'%20height%3D'9'%20fill%3D'%238fd3ff'%2F%3E%3Crect%20x%3D'157'%20y%3D'74'%20width%3D'7'%20height%3D'9'%20fill%3D'%238fd3ff'%2F%3E%3Crect%20x%3D'170'%20y%3D'54'%20width%3D'30'%20height%3D'46'%20fill%3D'%23e9edf9'%2F%3E%3Crect%20x%3D'167'%20y%3D'46'%20width%3D'36'%20height%3D'10'%20fill%3D'%236ecf8a'%2F%3E%3Crect%20x%3D'175'%20y%3D'64'%20width%3D'7'%20height%3D'9'%20fill%3D'%238fd3ff'%2F%3E%3Crect%20x%3D'187'%20y%3D'64'%20width%3D'7'%20height%3D'9'%20fill%3D'%238fd3ff'%2F%3E%3C%2Fsvg%3E"); }
+.battle[data-biome="town"]::after { background: linear-gradient(rgba(0,0,0,.13) 1px, transparent 1px) 0 0 / 52px 30px, linear-gradient(90deg, rgba(0,0,0,.13) 1px, transparent 1px) 0 0 / 52px 30px; }
+
+/* arena lendária (raid) */
+.battle[data-biome="legend"] { background: linear-gradient(#150a2b 0, #5a1f4f 46%, #2b1418 46%, #120a0d 100%); }
+.battle[data-biome="legend"]::before { height: clamp(70px, 17vh, 140px); background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%20200%20100'%20preserveAspectRatio%3D'none'%3E%3Cpolygon%20points%3D'0%2C100%2020%2C50%2040%2C74%2070%2C26%20100%2C70%20130%2C40%20160%2C78%20185%2C44%20200%2C100'%20fill%3D'%231a0d1f'%2F%3E%3Cpolygon%20points%3D'70%2C26%2062%2C44%2078%2C44'%20fill%3D'%23ff5a28'%20opacity%3D'.8'%2F%3E%3Cpolygon%20points%3D'130%2C40%20124%2C54%20136%2C54'%20fill%3D'%23ff8a3d'%20opacity%3D'.7'%2F%3E%3C%2Fsvg%3E"); }
+.battle[data-biome="legend"]::after { top: 0; background: radial-gradient(ellipse at 30% 90%, rgba(255,90,40,.32), transparent 45%), radial-gradient(ellipse at 80% 100%, rgba(255,140,60,.25), transparent 40%); animation: storm 5s ease-in-out infinite; }
+@keyframes storm { 0%, 88%, 100% { filter: none; } 90% { filter: brightness(2.2); } 93% { filter: brightness(1.2); } 95% { filter: brightness(2.6); } }
+.battle[data-biome="legend"] .platform { background: radial-gradient(ellipse at center, rgba(255,90,40,.35), rgba(255,90,40,0) 70%); }
+.battle.pvp:not([data-biome]) { background: linear-gradient(#3a2a6e 0, #7a5cc8 46%, #4a3b7a 46%, #2c2350 100%); }

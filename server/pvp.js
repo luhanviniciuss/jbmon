@@ -18,7 +18,7 @@ const CLAN_WIN = 30;
 const CLAN_LOSS = 10;
 const RANK = { member: 1, officer: 2, leader: 3 };
 
-module.exports = function createPvp({ app, prisma, auth, io, socketByUser, meByUser, groupInfo, isBusy, setBusy, markCombat, loadTeam, durable, clanSync }) {
+module.exports = function createPvp({ biomeOf, app, prisma, auth, io, socketByUser, meByUser, groupInfo, isBusy, setBusy, markCombat, loadTeam, durable, clanSync }) {
   const inMatch = new Map(); // uid -> match
   const challenges = new Map(); // uid desafiado -> { id, mode, from, to, exp }
   const recent = new Map(); // "a-b" -> [timestamps] (anti-farm)
@@ -113,7 +113,7 @@ module.exports = function createPvp({ app, prisma, auth, io, socketByUser, meByU
       const players = await Promise.all(ids.map(makePlayer));
       const pa = players.slice(0, A.length), pb = players.slice(A.length);
       const match = {
-        id: nextId++, mode, sides: [A, B], over: false,
+        id: nextId++, mode, sides: [A, B], over: false, biome: biomeOf ? biomeOf(A[0]) : 'field',
         clans: mode === 'clan' ? [meByUser.get(A[0]).clan.id, meByUser.get(B[0]).clan.id] : null,
         clanNames: mode === 'clan' ? [meByUser.get(A[0]).clan.name, meByUser.get(B[0]).clan.name] : null,
         duels: pa.map((p, i) => ({ n: i, p: [p, pb[i]], over: false, winner: null, timer: null, deadline: 0 })),
@@ -134,10 +134,10 @@ module.exports = function createPvp({ app, prisma, auth, io, socketByUser, meByU
     duel.p.forEach((pl, k) => {
       const foe = duel.p[1 - k];
       emit(pl.uid, 'pvp:state', {
-        match: match.id, mode: match.mode, duel: duel.n, clans: match.clanNames, side: match.sides[0].includes(pl.uid) ? 0 : 1,
+        match: match.id, mode: match.mode, biome: match.biome, duel: duel.n, clans: match.clanNames, side: match.sides[0].includes(pl.uid) ? 0 : 1,
         you: { name: pl.name, team: pub(pl.team), idx: pl.idx, forced: pl.forced, chose: !!pl.choice },
         foe: { name: foe.name, team: pub(foe.team), idx: foe.idx },
-        log, deadline: duel.over ? 0 : duel.deadline, over: duel.over, won: duel.over ? (duel.winner === k ? 'you' : 'foe') : null,
+        log: log.map((e) => (e.atk ? { ...e, atk: { type: e.atk.type, by: e.atk.by === k ? 'me' : 'foe' } } : e)), deadline: duel.over ? 0 : duel.deadline, over: duel.over, won: duel.over ? (duel.winner === k ? 'you' : 'foe') : null,
         duels: summary(match).map((s) => ({ ...s })),
       });
     });
@@ -207,7 +207,7 @@ module.exports = function createPvp({ app, prisma, auth, io, socketByUser, meByU
         if (Math.random() > mv.acc) { log.push({ msg: `${nameOf(am)} de ${att.name} usou ${mv.name}, mas errou!` }); continue; }
         const h = calcHit(LEVEL, mv, am.attack, dm.defense, aT, dT);
         dm.hp = Math.max(0, dm.hp - h.dmg);
-        log.push({ msg: `${nameOf(am)} de ${att.name} usou ${mv.name}!${effText(h.eff)}${h.crit ? ' Acerto crítico!' : ''} (-${h.dmg})`, eff: h.eff });
+        log.push({ msg: `${nameOf(am)} de ${att.name} usou ${mv.name}!${effText(h.eff)}${h.crit ? ' Acerto crítico!' : ''} (-${h.dmg})`, eff: h.eff, atk: { type: mv.type, by: k } });
         if (dm.hp <= 0) log.push({ msg: `${nameOf(dm)} de ${def.name} desmaiou!` });
       }
     }

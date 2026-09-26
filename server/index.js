@@ -15,6 +15,7 @@ const createChat = require('./chat.js');
 const createModeration = require('./moderation.js');
 const createClans = require('./clan.js');
 const createPvp = require('./pvp.js');
+const { biomeAt } = require('./biome.js');
 const createVoip = require('./voip.js');
 const registerAdmin = require('./admin.js');
 const { retry, durable, flushPending, pendingCount } = require('./durable.js');
@@ -322,6 +323,7 @@ registerAdmin({
 
 const clans = createClans({ app, prisma, auth, io, socketByUser, meByUser });
 const pvp = createPvp({
+  biomeOf: (uid) => { const m = meByUser.get(uid); return m ? biomeAt(MAP, TILE, m.x, m.y, { town: inClearing(Math.floor(m.x / TILE), Math.floor(m.y / TILE)) }) : 'field'; },
   app, prisma, auth, io, socketByUser, meByUser, loadTeam, durable, markCombat,
   groupInfo: raidSys.groupInfo, clanSync: clans.refreshClan,
   isBusy: (uid) => battlingUsers.has(uid) || raidSys.inRaid(uid) || !!meByUser.get(uid)?.hidden,
@@ -411,7 +413,7 @@ io.on('connection', (socket) => {
       const fresh = await prisma.user.findUnique({ where: { id: u.id } });
       if (!mine || socket.disconnected) return releaseWild(w);
       battle = { team, mine, world: w, wild: makeWild(w.species_id, w.level), inv: invOf(fresh) };
-      socket.emit('battle:start', { wild: wildView(battle.wild), mine: mineView(mine), balls: battle.inv, team: team.map(mineView) });
+      socket.emit('battle:start', { biome: biomeAt(MAP, TILE, w.x, w.y, { water: !!w.water }), wild: wildView(battle.wild), mine: mineView(mine), balls: battle.inv, team: team.map(mineView) });
     } catch (err) {
       console.error('Falha ao iniciar batalha', err.message);
       releaseWild(w);

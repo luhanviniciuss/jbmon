@@ -281,7 +281,7 @@ module.exports = function createRaidSystem(ctx) {
       const h = calcHit(r.level, bmv, r.atk, my.defense, bTypes, myTypes);
       const dmg = h.dmg === 0 ? 0 : Math.max(1, Math.floor(h.dmg * DMG_MULT));
       my.current_hp = Math.max(0, my.current_hp - dmg);
-      push(`${bName} usou ${bmv.name} em ${m.username}!${effText(h.eff)}${h.crit ? ' Acerto crítico!' : ''} (-${dmg})`, null, { target: uid, targetMine: mineView(my) });
+      push(`${bName} usou ${bmv.name} em ${m.username}!${effText(h.eff)}${h.crit ? ' Acerto crítico!' : ''} (-${dmg})`, null, { target: uid, targetMine: mineView(my), eff: h.eff, atk: { type: bmv.type, by: 'foe' } });
     }
     if (my.current_hp <= 0) {
       push(`${nameOf(my)} de ${m.username} desmaiou!`, null, { target: uid, targetMine: mineView(my) });
@@ -333,14 +333,16 @@ module.exports = function createRaidSystem(ctx) {
         const mv = getMove(type, myTypes);
         let reached = false;
         let line;
+        let atk = null;
         if (Math.random() > mv.acc) line = `${m.username}: ${nameOf(my)} usou ${mv.name}, mas errou!`;
         else {
           const h = calcHit(my.level, mv, my.attack, r.def, myTypes, bTypes);
           r.hp = Math.max(0, r.hp - h.dmg);
           if (r.hp <= r.threshold) { r.hp = r.threshold; reached = true; }
           line = `${m.username}: ${nameOf(my)} usou ${mv.name}!${effText(h.eff)}${h.crit ? ' Acerto crítico!' : ''} (-${h.dmg})`;
+          atk = { eff: h.eff, atk: { type: mv.type, by: 'me', actor: uid } };
         }
-        push(line);
+        push(line, null, atk || undefined);
         if (reached) {
           push(`${bName} está exausto! Agora é hora de capturá-lo!`, 'exhaust');
           enterCapture(r, push);

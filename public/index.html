@@ -108,6 +108,7 @@
     <div class="b-field">
       <div class="b-card foe glass"><div class="b-name"><b id="foeName"></b><span class="lv" id="foeLv"></span></div><div class="hpbar"><i id="foeHp"></i></div><div class="rar" id="foeRar"></div></div>
       <div id="raidBar" class="raidbar" hidden></div>
+      <canvas id="fxCanvas" class="fxc"></canvas>
       <div class="platform foe-plat"></div><img id="foeImg" class="b-sprite foe-sprite" alt="" />
       <div class="platform my-plat"></div><img id="myImg" class="b-sprite my-sprite" alt="" />
       <div class="b-card mine glass"><div class="b-name"><b id="myName"></b><span class="lv" id="myLv"></span></div><div class="hpbar"><i id="myHp"></i></div><div class="hp-txt" id="myHpTxt"></div><div class="xpbar"><i id="myXp"></i></div></div>
@@ -142,6 +143,7 @@
   <!-- Batalha PvP -->
   <div id="pvpBattle" class="battle pvp" hidden>
     <div class="b-field">
+      <canvas id="pvFx" class="fxc"></canvas>
       <div class="pv-top"><span id="pvLabel"></span><span id="pvTimer"></span></div>
       <div class="b-card foe glass"><div class="b-name"><b id="pvFoeName"></b><span class="lv" id="pvFoeLv"></span></div><div class="hpbar"><i id="pvFoeHp"></i></div><div class="pv-row"><span id="pvFoeTypes"></span><span class="pips" id="pvFoePips"></span></div></div>
       <div id="pvDuels" class="pv-duels" hidden></div>
@@ -195,6 +197,7 @@
   <script src="/items.js"></script>
   <script src="/lab.js"></script>
   <script src="/game.js"></script>
+  <script src="/fx.js"></script>
   <script src="/battle.js"></script>
   <script src="/arena.js"></script>
   <script src="/settings.js"></script>

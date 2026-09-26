@@ -91,6 +91,11 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 - **Auditoria**: toda ação fica na tabela `AdminLog` (quem, o quê, alvo e detalhes).
 - **Selo ADM** no chat e nomes reservados (`admin`, `moderador`, `gm`, `sistema`…) que jogadores comuns não conseguem registrar.
 
+## Efeitos de golpe e cenários de batalha
+- **Efeitos por tipo** (`public/fx.js`, motor de partículas em canvas): cada um dos 17 tipos tem o seu roteiro — Fogo (bola de chamas e explosão), Água (jato e respingo com ondas), Elétrico (raios ramificados e clarão), Planta (folhas em espiral), Gelo (estilhaços e cristal), Lutador (socos com ondas de choque), Veneno (bolhas e poça), Terra (fissuras, pedras e poeira com tremor forte), Voador (cortes de vento e penas), Psíquico (anéis e espiral), Inseto (enxame), Pedra (chuva de pedras), Fantasma (fogos-fátuos), Dragão (chamas em hélice) , Sombrio (fumaça e garras) , Aço (corte em X e faíscas) e Normal (impacto). Golpes **críticos** ficam maiores, com mais partículas e clarão; o atacante avança (golpes físicos) e aparece o **dano flutuante** (dourado = super efetivo, cinza = pouco efetivo).
+- Vale para batalha selvagem, **raid** e **PvP** (no PvP o lado do atacante é ajustado para cada jogador). O servidor só manda o tipo do golpe no log; o efeito é só decoração e respeita "reduzir movimento" do sistema.
+- **Cenário por bioma**: o servidor deduz o bioma pelos tiles ao redor de onde a luta acontece (`server/biome.js`) e o cliente troca o cenário: **Campo**, **Grama alta** (flores), **Floresta** (pinheiros e raios de luz), **Praia** (mar com ondas e areia), **Lago** (montanhas e água brilhando; também para Pokémon aquáticos), **Praça do Centro Pokémon** (prédios e piso; PvP na clareira) e **Arena lendária** (vulcão e relâmpagos, nas raids). O nome do bioma aparece ao começar a batalha.
+
 ## Personagem
 - O avatar é uma sprite sheet gerada em código (`drawAvatar` em `public/game.js`): boné com pompom, cabelo, rosto, jaqueta, braços, cinto, calça e tênis, em **4 direções** (frente, costas, esquerda, direita) com **animação de caminhada** (passos alternados, braços balançando e leve balanço do corpo). Você é vermelho; os outros jogadores ganham uma cor de jaqueta (6 opções) escolhida pelo nome, e o avatar também anda no laboratório.
 

@@ -187,7 +187,7 @@ function resolveTurn(b, type) {
     else {
       const h = calcHit(my.level, mv, my.attack, w.defense, myTypes, wTypes);
       w.hp = Math.max(0, w.hp - h.dmg);
-      push(`${nameOf(my)} usou ${mv.name}!${effText(h.eff)}${h.crit ? ' Acerto crítico!' : ''} (-${h.dmg})`, null, { eff: h.eff });
+      push(`${nameOf(my)} usou ${mv.name}!${effText(h.eff)}${h.crit ? ' Acerto crítico!' : ''} (-${h.dmg})`, null, { eff: h.eff, atk: { type: mv.type, by: 'me' } });
     }
     if (w.hp <= 0) {
       push(`${wname} selvagem foi derrotado!`);
@@ -229,7 +229,7 @@ function resolveTurn(b, type) {
   else {
     const h = calcHit(w.level, mv, w.attack, my.defense, wTypes, myTypes);
     my.current_hp = Math.max(0, my.current_hp - h.dmg);
-    push(`${wname} usou ${mv.name}!${effText(h.eff)}${h.crit ? ' Acerto crítico!' : ''} (-${h.dmg})`, null, { eff: h.eff });
+    push(`${wname} usou ${mv.name}!${effText(h.eff)}${h.crit ? ' Acerto crítico!' : ''} (-${h.dmg})`, null, { eff: h.eff, atk: { type: mv.type, by: 'foe' } });
   }
   if (my.current_hp <= 0) {
     push(`${nameOf(my)} desmaiou!`);

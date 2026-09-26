@@ -163,29 +163,33 @@ module.exports = function createRaidSystem(ctx) {
     const hint = (msg) => { if (Date.now() - (lastHint.get(uid) || 0) > 4000) { lastHint.set(uid, Date.now()); notice(uid, msg); } };
     const g = groups.get(groupOf.get(uid));
     if (!g || g.members.length < 2) return hint('Forme um grupo de 2 a 4 jogadores (tecla G) para enfrentar o lendário.');
-    const near = g.members.filter((id) => {
+    // A raid só começa com o grupo INTEIRO (2, 3 ou 4): nunca com parte dos membros.
+    const ready = (id) => {
       const p = meByUser.get(id);
       return p && (!p.world || p.world === 'route') && Math.hypot(p.x - boss.x, p.y - boss.y) < NEAR_R && !isBusy(id) && !raids.has(id);
-    });
-    if (near.length < 2) return hint('Reúna pelo menos 2 membros do grupo perto do boss.');
+    };
+    const missing = g.members.filter((id) => !ready(id));
+    if (missing.length) return hint(`Todos do grupo precisam estar perto do boss para começar. Faltam: ${missing.map((id) => meByUser.get(id)?.username || 'alguém').join(', ')}.`);
+    const near = [...g.members];
 
     starting = true;
     boss.busy = true;
     near.forEach((id) => setBusy(id, true));
     try {
       const members = [];
+      const notReady = [];
       for (const id of near) {
         const team = await loadTeam(prisma, id);
         const mine = team.find((p) => p.current_hp > 0);
         const user = await prisma.user.findUnique({ where: { id } });
-        if (!mine || !meByUser.get(id)) { setBusy(id, false); continue; }
+        if (!mine || !meByUser.get(id)) { notReady.push(meByUser.get(id)?.username || 'alguém'); continue; }
         members.push({ uid: id, username: meByUser.get(id).username, team, mine, fighters: new Set([mine.id]), inv: invOf(user), eliminated: false, left: false, drops: null, persisted: false });
       }
-      if (members.length < 2) {
-        members.forEach((m) => setBusy(m.uid, false));
+      if (notReady.length) { // todos precisam poder lutar: ninguém começa sem o grupo inteiro
+        near.forEach((id) => { setBusy(id, false); notice(id, `A raid não pode começar: ${notReady.join(', ')} precisa de um Pokémon saudável (Centro Pokémon).`); });
         boss.busy = false;
         emitBoss();
-        return hint('Membros do grupo precisam ter Pokémon saudáveis.');
+        return;
       }
       const level = BOSS_LEVEL;
       const avg = Math.round(members.reduce((s, m) => s + m.mine.level, 0) / members.length);

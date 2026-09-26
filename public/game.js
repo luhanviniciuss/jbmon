@@ -7,7 +7,8 @@ let MY_ID = null;
 let IS_ADMIN = false; // vem do servidor no login; o servidor confere de novo a cada ação do painel
 let MY_CLAN = null; // { id, tag, name, role }
 let GROUP = null; // { id, leader, members:[{id, username}] }
-let BOSS = null; // { species_id, x, y, until }
+let BOSS = null; // boss do mundo atual: { species_id, level, x, y, until }
+const BOSS_ALL = {}; // world -> { species_id, level, until } de cada mundo (o chip avisa de lendários em outros mundos)
 let BOSS_NEXT = null; // timestamp local do próximo boss
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const tagged = (name, clan) => (clan?.tag ? '[' + clan.tag + '] ' : '') + name;
@@ -246,12 +247,15 @@ const fmtTime = (ms) => {
 };
 setInterval(() => {
   const chip = $('bossChip');
-  if (!BOSS && BOSS_NEXT === null) return;
+  const other = Object.entries(BOSS_ALL).find(([w, b]) => b && w !== WORLD_ID);
+  if (!BOSS && !other && BOSS_NEXT === null) return;
   chip.hidden = false;
-  chip.classList.toggle('live', !!BOSS);
-  chip.textContent = BOSS ? '⚔ ' + SPECIES[BOSS.species_id].name + ' · ' + fmtTime(BOSS.until - Date.now()) : '⏳ Próximo lendário: ' + fmtTime(BOSS_NEXT - Date.now());
+  chip.classList.toggle('live', !!BOSS || !!other);
+  chip.textContent = BOSS ? '⚔ ' + SPECIES[BOSS.species_id].name + ' Lv.' + BOSS.level + ' · ' + fmtTime(BOSS.until - Date.now())
+    : other ? '⚔ Lendário: ' + SPECIES[other[1].species_id].name + ' Lv.' + other[1].level + ' · ' + WORLDS[other[0]].icon + ' ' + WORLDS[other[0]].name
+    : '⏳ Próximo lendário: ' + fmtTime(BOSS_NEXT - Date.now());
 }, 500);
-$('bossChip').addEventListener('click', () => { if (BOSS && WORLD_ID === 'route') window.worldScene?.walkToWorld(BOSS.x, BOSS.y); });
+$('bossChip').addEventListener('click', () => { if (BOSS) window.worldScene?.walkToWorld(BOSS.x, BOSS.y); });
 $('closeBag').addEventListener('click', () => openBag(false));
 $('closeParty').addEventListener('click', () => openParty(false));
 window.addEventListener('keydown', (e) => {
@@ -423,7 +427,7 @@ class WorldScene extends Phaser.Scene {
     this.socket.on('online', (n) => { $('online').textContent = n; });
     this.socket.on('players:init', ({ self, others, balls }) => {
       MY_ID = self.id;
-      if (self.world && self.world !== this.worldId) this.loadWorld(self.world);
+      if (self.world && self.world !== this.worldId) { this.loadWorld(self.world); this.setBoss(this.bossRaw?.[self.world] || null); }
       MY_CLAN = self.clan || null;
       setClanLabel();
       setBalls(balls);
@@ -507,7 +511,7 @@ class WorldScene extends Phaser.Scene {
       this.lastTarget = '';
       others.forEach((p) => this.addOther(p));
       wilds.forEach((w) => this.addWild(w));
-      this.setBoss(this.lastBoss || null);
+      this.setBoss(this.bossRaw?.[world] || null);
       this.cameras.main.resetFX();
       this.cameras.main.fadeIn(500, 255, 255, 255);
       const d = WORLDS[world];
@@ -526,7 +530,12 @@ class WorldScene extends Phaser.Scene {
     Story.init(this.socket);
     Dex.init(this.socket);
     this.socket.on('notice', ({ msg, big }) => toast(msg, big));
-    this.socket.on('boss:state', ({ boss, nextIn }) => { BOSS_NEXT = nextIn != null ? Date.now() + nextIn : null; this.setBoss(boss); });
+    this.socket.on('boss:state', ({ world, boss, nextIn }) => {
+      BOSS_NEXT = nextIn != null ? Date.now() + nextIn : null;
+      (this.bossRaw ||= {})[world] = boss;
+      BOSS_ALL[world] = boss ? { species_id: boss.species_id, level: boss.level, until: Date.now() + boss.left } : null;
+      if (world === WORLD_ID) this.setBoss(boss);
+    });
     this.socket.on('group:update', (gr) => { GROUP = gr; setGroupLabel(); if ($('group').classList.contains('open')) renderGroup(); });
     this.socket.on('group:invited', ({ from }) => {
       $('inviteTxt').textContent = from + ' convidou você para um grupo';
@@ -1067,14 +1076,13 @@ class WorldScene extends Phaser.Scene {
 
   setBoss(b) {
     if (this.bossObj) { const o = this.bossObj; this.tweens.killTweensOf(o.aura); this.tweens.killTweensOf(o.img); Object.values(o).forEach((x) => x.destroy()); this.bossObj = null; }
-    BOSS = b ? { species_id: b.species_id, x: b.x, y: b.y, until: Date.now() + b.left } : null;
-    this.lastBoss = b;
-    if (!b || WORLD_ID !== 'route') return; // o boss só existe na Rota
+    BOSS = b ? { species_id: b.species_id, level: b.level, x: b.x, y: b.y, until: Date.now() + b.left } : null;
+    if (!b) return;
     const aura = this.add.circle(b.x, b.y + 6, 54, 0xf0b400, 0.25).setDepth(6);
     this.tweens.add({ targets: aura, scale: 1.4, alpha: 0.05, yoyo: true, repeat: -1, duration: 900 });
     const shadow = this.add.image(b.x, b.y + 34, 'shadow').setDepth(6).setScale(2.4);
     const img = this.add.image(b.x, b.y, 'wilddot').setDepth(8);
-    const label = this.add.text(b.x, b.y - 78, '☠ BOSS · ' + SPECIES[b.species_id].name, { fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: '13px', fontStyle: 'bold', color: '#2b1d00', backgroundColor: '#f0b400', padding: { x: 8, y: 3 } }).setOrigin(0.5).setDepth(20);
+    const label = this.add.text(b.x, b.y - 78, '☠ BOSS · ' + SPECIES[b.species_id].name + ' Lv.' + b.level, { fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: '13px', fontStyle: 'bold', color: '#2b1d00', backgroundColor: '#f0b400', padding: { x: 8, y: 3 } }).setOrigin(0.5).setDepth(20);
     this.ensureMon(b.species_id, (key) => { if (img.active) img.setTexture(key).setDisplaySize(120, 120); });
     this.tweens.add({ targets: img, y: b.y - 6, yoyo: true, repeat: -1, duration: 1100, ease: 'Sine.easeInOut' });
     this.bossObj = { aura, shadow, img, label };
@@ -1113,7 +1121,7 @@ class WorldScene extends Phaser.Scene {
     const S = 150, k = S / MAP_W, c = this.miniCtx;
     c.drawImage(this.mini, 0, 0, S, S);
     const dot = (px, py, col, r) => { c.fillStyle = col; c.beginPath(); c.arc((px / TILE) * k, (py / TILE) * k, r, 0, Math.PI * 2); c.fill(); };
-    if (BOSS && WORLD_ID === 'route') { c.lineWidth = 1.5; c.strokeStyle = '#fff'; dot(BOSS.x, BOSS.y, '#f0b400', 4.2); c.stroke(); }
+    if (BOSS) { c.lineWidth = 1.5; c.strokeStyle = '#fff'; dot(BOSS.x, BOSS.y, '#f0b400', 4.2); c.stroke(); }
     this.wilds.forEach((w) => dot(w.img.x, w.img.y, w.water ? '#5ec8ff' : '#ffb02e', 1.8));
     const mates = new Set((GROUP?.members || []).map((m) => m.id));
     this.others.forEach((o, id) => { if (!o.hidden && !mates.has(id)) dot(o.sprite.x, o.sprite.y, o.combat ? '#ff4d5e' : '#4da3ff', 2.5); });

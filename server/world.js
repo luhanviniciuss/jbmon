@@ -141,7 +141,7 @@ module.exports = function createWorld({ io, id, MAP, newId }) {
   }, 1000);
 
   return {
-    id, room, def, MAP, wilds, isBlocked, isWalkable, spawnAdminWild, clearAdminWilds, releaseWild, defeatWild,
+    id, room, def, MAP, reach, wilds, isBlocked, isWalkable, spawnAdminWild, clearAdminWilds, releaseWild, defeatWild,
     publicOf, publicList: () => [...wilds.values()].filter((w) => !w.busy).map(publicOf),
   };
 };

@@ -231,6 +231,12 @@ const BOSS_TABLE = [
   [249, 1.5], [250, 1.5], [380, 1.5], [381, 1.5], [385, 1.5],
   [382, 1], [383, 1], [384, 1], [386, 1],
 ];
+// Um boss lendário por mundo, com lendários próprios e SEMPRE no nível máximo do mundo (WORLDS[id].bossLevel)
+const BOSS_TABLES = {
+  route: [[145, 3], [243, 3], [151, 2], [251, 2], [150, 2], [380, 1.5], [381, 1.5], [385, 1.5], [386, 1]],
+  ice: [[144, 3], [245, 3], [378, 2], [379, 2], [249, 1.5], [382, 1]],
+  lava: [[146, 3], [244, 3], [377, 2], [250, 1.5], [383, 1], [384, 1]],
+};
 
 function calcStats(id, level) {
   const s = SPECIES[id];
@@ -259,5 +265,5 @@ function evolveTarget(id, level) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { SPECIES, RARITY, TYPES, CHART, MOVE_NAMES, EVOLUTIONS, WILD_TABLE, WATER_TABLE, WORLD_TABLES, BOSS_TABLE, LEGEND_MOVES, POWER_CD, MAX_LEVEL, expToNext, minLevel, calcStats, evolveTarget, effectiveness };
+  module.exports = { SPECIES, RARITY, TYPES, CHART, MOVE_NAMES, EVOLUTIONS, WILD_TABLE, WATER_TABLE, WORLD_TABLES, BOSS_TABLE, BOSS_TABLES, LEGEND_MOVES, POWER_CD, MAX_LEVEL, expToNext, minLevel, calcStats, evolveTarget, effectiveness };
 }

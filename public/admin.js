@@ -77,7 +77,7 @@ const Admin = (() => {
       '<div class="arow2" id="spXY" hidden><label class="al">x (0-99)<input id="spX" class="af" type="number" inputmode="numeric" value="50" /></label><label class="al">y (0-99)<input id="spY" class="af" type="number" inputmode="numeric" value="50" /></label></div>' +
       '<button class="btn primary" data-a="spawn">Spawnar</button><button class="ab" data-a="clearSpawns">🧹 Limpar spawns do admin</button>' +
       '<div class="section-title">Boss lendário agora</div>' + picker('bs', true) +
-      '<button class="btn primary" data-a="boss">⚔ Chamar boss (Lv.100)</button><p class="hintline">Spawns de admin somem sozinhos e, se derrotados, não deixam substituto.</p>';
+      '<label class="al">Mundo do boss<select id="bsW" class="af"><option value="">Automático (pelo lendário)</option><option value="route">🌿 Rota 1 (Lv.60)</option><option value="ice">❄ Bioma de Gelo (Lv.200)</option><option value="lava">🌋 Vulcão (Lv.500)</option></select></label><button class="btn primary" data-a="boss">⚔ Chamar boss (nível máximo do mundo)</button><p class="hintline">Spawns de admin somem sozinhos e, se derrotados, não deixam substituto.</p>';
   }
   function giveHtml() {
     const names = (st?.online || []).map((p) => '<option value="' + esc(p.username) + '">').join('');
@@ -89,8 +89,8 @@ const Admin = (() => {
   }
   function sysHtml() {
     const s = st?.stats;
-    const b = s?.boss;
-    const stats = s ? '<div class="astats"><div><b>' + s.online + '</b><span>online</span></div><div><b>' + s.wilds + '</b><span>selvagens</span></div><div><b>' + s.adminWilds + '</b><span>spawns admin</span></div><div><b>' + s.memMB + ' MB</b><span>memória</span></div><div><b>' + Math.floor(s.uptimeSec / 3600) + 'h' + String(Math.floor((s.uptimeSec % 3600) / 60)).padStart(2, '0') + '</b><span>no ar</span></div><div><b>' + (b ? esc(SPECIES[b.species_id].name) : '—') + '</b><span>' + (b ? 'boss' + (b.busy ? ' (em raid)' : ' · ' + b.leftMin + ' min') : 'sem boss') + '</span></div></div>' : '';
+    const bl = s?.boss || []; // um boss por mundo
+    const stats = s ? '<div class="astats"><div><b>' + s.online + '</b><span>online</span></div><div><b>' + s.wilds + '</b><span>selvagens</span></div><div><b>' + s.adminWilds + '</b><span>spawns admin</span></div><div><b>' + s.memMB + ' MB</b><span>memória</span></div><div><b>' + Math.floor(s.uptimeSec / 3600) + 'h' + String(Math.floor((s.uptimeSec % 3600) / 60)).padStart(2, '0') + '</b><span>no ar</span></div><div><b>' + (bl.length ? bl.map((x) => esc(SPECIES[x.species_id].name) + ' Lv.' + x.level).join(', ') : '—') + '</b><span>' + (bl.length ? 'boss · ' + bl.map((x) => WORLDS[x.world].icon + (x.busy ? ' em raid' : ' ' + x.leftMin + ' min')).join(' · ') : 'sem boss') + '</span></div></div>' : '';
     const log = (logRows || []).map((l) => '<div class="alog"><span>' + fmtDate(l.created_at) + '</span> <b>' + esc(l.admin_name) + '</b> ' + esc(l.action) + (l.target ? ' → ' + esc(l.target) : '') + '</div>').join('');
     return '<div class="section-title">Servidor</div>' + stats +
       '<div class="section-title">Aviso para todos</div><textarea id="anTxt" class="af" rows="2" maxlength="200" placeholder="Ex.: Manutenção em 5 minutos!"></textarea><button class="btn primary" data-a="announce">📢 Enviar aviso</button>' +
@@ -167,7 +167,7 @@ const Admin = (() => {
         return act('/spawn', body, 'Spawn criado');
       }
       case 'clearSpawns': return act('/clear-spawns', {}, 'Spawns removidos');
-      case 'boss': return act('/boss', { species_id: $('bsS').value ? +$('bsS').value : null }, 'Boss chamado');
+      case 'boss': return act('/boss', { species_id: $('bsS').value ? +$('bsS').value : null, world: $('bsW').value || undefined }, 'Boss chamado');
       case 'givePoke': return act('/give-pokemon', { username: $('gvU').value.trim(), species_id: +$('gvS').value, level: num('gvLv', 30) }, 'Pokémon entregue');
       case 'giveItem': return act('/give-item', { username: $('gvU').value.trim(), item: $('gvItem').value, amount: num('gvN', 1) }, 'Item entregue');
       case 'healGv': return act('/heal', { username: $('gvU').value.trim() }, 'Equipe curada');

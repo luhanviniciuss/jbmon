@@ -180,9 +180,9 @@ module.exports = function registerAdmin(ctx) {
   route('post', '/boss', async (req, res) => {
     const species_id = req.body.species_id == null ? null : int(req.body.species_id, 1, 999);
     if (req.body.species_id != null && (!species_id || !SPECIES[species_id])) return res.status(400).json({ error: 'Espécie inválida' });
-    const r = raidSys.adminSpawnBoss(species_id);
+    const r = raidSys.adminSpawnBoss(species_id, str(req.body.world, 10));
     if (r.error) return res.status(409).json({ error: r.error });
-    await audit(req.admin, 'boss', species_id ? SPECIES[species_id].name : 'sorteio');
+    await audit(req.admin, 'boss', (species_id ? SPECIES[species_id].name : 'sorteio') + ' · ' + r.world);
     res.json({ ok: true });
   });
 

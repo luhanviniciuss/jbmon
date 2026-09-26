@@ -260,7 +260,7 @@ async function refreshBuddy(uid, quiet = false) {
   }
 }
 const raidSys = createRaidSystem({
-  io, prisma, MAP, socketByUser, meByUser, teleportHome,
+  io, prisma, MAP, worlds: W, socketByUser, meByUser, teleportHome,
   clearing: inClearing,
   buddyRefresh: (uid) => refreshBuddy(uid),
   dexSeen: (uid, sp) => pokedex.mark(uid, sp, 'seen'),

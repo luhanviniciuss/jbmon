@@ -2,8 +2,9 @@
 // Fluxo: boss aparece no mapa -> jogadores formam grupo (2-4) -> encostam no boss -> raid por turnos:
 //   Fase 1 (luta): cada membro age na sua vez; o boss revida no atacante. Ao chegar em 15% de HP ele fica exausto.
 //   Fase 2 (captura): o boss segue com vida; cada membro tem UMA rodada para lançar uma Pokébola.
-const { SPECIES, RARITY, BOSS_TABLE, LEGEND_MOVES, POWER_CD, calcStats, effectiveness } = require('../public/species.js');
+const { SPECIES, RARITY, BOSS_TABLES, LEGEND_MOVES, POWER_CD, calcStats, effectiveness } = require('../public/species.js');
 const { BALLS } = require('../public/items.js');
+const { WORLDS } = require('../public/map.js');
 const { durable } = require('./durable.js');
 const { loadTeam, nextFreeSlot } = require('./team.js');
 const { rand, pickSpecies, mineView, nameOf, getMove, calcHit, effText, catchChance, awardExp, XP_RATE } = require('./battle.js');
@@ -14,7 +15,7 @@ const CFG = {
   first: envNum('BOSS_FIRST_DELAY_MIN', 2) * 60000, // primeiro boss logo após ligar o servidor
   life: envNum('BOSS_LIFETIME_MIN', 30) * 60000, // quanto tempo espera por desafiantes
 };
-const BOSS_LEVEL = 100; // todo lendário é nível 100 (o máximo): é preciso treinar bastante antes
+const BOSS_WORLDS = ['route', 'ice', 'lava']; // um boss por mundo, sempre no nível máximo do mundo (WORLDS[id].bossLevel)
 const MAX_GROUP = 4;
 const TURN_MS = 25000;
 const EXHAUST = 0.15; // o boss fica com 15% de HP na fase de captura
@@ -25,7 +26,7 @@ const TOUCH_R = 64; // px para encostar no boss
 const NEAR_R = 640; // membros precisam estar a esta distância do boss
 
 module.exports = function createRaidSystem(ctx) {
-  const { io, prisma, MAP, clearing, socketByUser, meByUser, isBusy, setBusy, teleportHome } = ctx;
+  const { io, prisma, MAP, worlds, clearing, socketByUser, meByUser, isBusy, setBusy, teleportHome } = ctx;
   const bossName = (id) => SPECIES[id].name;
   const notice = (uid, msg) => socketByUser.get(uid)?.emit('notice', { msg });
   const invOf = (u) => ({ poke: u.pokeballs, great: u.greatballs, ultra: u.ultraballs, master: u.masterballs });
@@ -89,24 +90,39 @@ module.exports = function createRaidSystem(ctx) {
   }
 
   // ================= Boss no mundo =================
-  let boss = null; // { species_id, tx, ty, x, y, expiresAt, busy }
+  const bosses = { route: null, ice: null, lava: null }; // world -> { world, species_id, level, tx, ty, x, y, expiresAt, busy }
   let nextAt = null;
-  const bossPublic = () => (boss && !boss.busy ? { species_id: boss.species_id, x: boss.x, y: boss.y, left: Math.max(0, boss.expiresAt - Date.now()) } : null);
-  const emitBoss = (target = io) => target.emit('boss:state', { boss: bossPublic(), nextIn: nextAt ? Math.max(0, nextAt - Date.now()) : null });
+  const worldName = (w) => (w === 'route' ? 'na Rota 1' : 'no ' + WORLDS[w].name);
+  const bossPublic = (b) => (b && !b.busy ? { world: b.world, species_id: b.species_id, level: b.level, x: b.x, y: b.y, left: Math.max(0, b.expiresAt - Date.now()) } : null);
+  const emitBoss = (target = io) => BOSS_WORLDS.forEach((w) => target.emit('boss:state', { world: w, boss: bossPublic(bosses[w]), nextIn: nextAt ? Math.max(0, nextAt - Date.now()) : null }));
+  const worldOfSpecies = (id) => BOSS_WORLDS.find((w) => BOSS_TABLES[w].some(([s]) => s === id)) || 'route';
 
-  function spawnBoss(forced, lifeMs) { // forced/lifeMs: usados pelo painel admin
-    if (boss && (!forced || boss.busy)) return false;
-    let tx, ty;
-    for (let i = 0; i < 500; i++) {
-      tx = rand(4, 95); ty = rand(4, 95);
-      const d = Math.hypot(tx - 50, ty - 50), t = MAP[ty][tx];
-      if ((t === 0 || t === 4) && d >= 18 && d <= 38 && !clearing(tx, ty)) break;
+  // Local do boss: só em terra que o jogador ALCANÇA (rios, lagos e lava podem isolar pedaços do mapa) e longe da chegada/clareira
+  function pickTile(wid) {
+    const { MAP: M, reach } = worlds[wid];
+    const near = (tx, ty) => (wid === 'route' ? clearing(tx, ty) : Math.abs(tx - 50) < 8 && Math.abs(ty - 50) < 8);
+    const ok = (tx, ty, strict) => { const t = M[ty]?.[tx]; return reach[ty]?.[tx] && (t === 0 || t === 4 || (!strict && t !== 2 && t !== 3)) && !near(tx, ty); };
+    for (const [lo, hi, strict] of [[18, 38, true], [12, 45, true], [12, 45, false]]) {
+      for (let i = 0; i < 600; i++) {
+        const tx = rand(4, 95), ty = rand(4, 95), d = Math.hypot(tx - 50, ty - 50);
+        if (d >= lo && d <= hi && ok(tx, ty, strict)) return [tx, ty];
+      }
     }
-    const species_id = forced || pickSpecies(BOSS_TABLE);
-    boss = { species_id, tx, ty, x: tx * 32 + 16, y: ty * 32 + 16, expiresAt: Date.now() + (lifeMs || CFG.life), busy: false };
-    io.emit('notice', { msg: `✦ ${bossName(species_id)} lendário (Lv.${BOSS_LEVEL}) apareceu! Treine sua equipe, forme um grupo (G) e enfrente-o!`, big: true });
+    return null;
+  }
+
+  function spawnBoss(wid, forcedSpecies, lifeMs, force) { // force/forcedSpecies/lifeMs: usados pelo painel admin
+    const cur = bosses[wid];
+    if (cur && (!force || cur.busy)) return false;
+    const tile = pickTile(wid);
+    if (!tile) return false;
+    const [tx, ty] = tile;
+    const species_id = forcedSpecies || pickSpecies(BOSS_TABLES[wid]);
+    const level = WORLDS[wid].bossLevel;
+    bosses[wid] = { world: wid, species_id, level, tx, ty, x: tx * 32 + 16, y: ty * 32 + 16, expiresAt: Date.now() + (lifeMs || CFG.life), busy: false };
+    io.emit('notice', { msg: `✦ ${bossName(species_id)} lendário (Lv.${level}) apareceu ${worldName(wid)}! Treine sua equipe, forme um grupo (G) e enfrente-o!`, big: true });
     emitBoss();
-    console.log(`Boss: ${bossName(species_id)} em (${tx},${ty})`);
+    console.log(`Boss: ${bossName(species_id)} Lv.${level} em ${wid} (${tx},${ty})`);
     return true;
   }
 
@@ -118,7 +134,7 @@ module.exports = function createRaidSystem(ctx) {
     const dueIn = Math.max(CFG.first, last + CFG.interval - Date.now());
     nextAt = Date.now() + dueIn;
     const loop = async () => {
-      const spawned = spawnBoss();
+      const spawned = BOSS_WORLDS.map((w) => spawnBoss(w)).some(Boolean); // um lendário em cada mundo
       nextAt = Date.now() + CFG.interval;
       emitBoss();
       if (spawned) {
@@ -130,10 +146,13 @@ module.exports = function createRaidSystem(ctx) {
     setTimeout(loop, dueIn);
     console.log(`Próximo boss em ${Math.round(dueIn / 60000)} min`);
     setInterval(() => { // expira se ninguém enfrentou
-      if (boss && !boss.busy && Date.now() >= boss.expiresAt) {
-        io.emit('notice', { msg: `${bossName(boss.species_id)} foi embora…` });
-        boss = null;
-        emitBoss();
+      for (const w of BOSS_WORLDS) {
+        const b = bosses[w];
+        if (b && !b.busy && Date.now() >= b.expiresAt) {
+          io.emit('notice', { msg: `${bossName(b.species_id)} foi embora…` });
+          bosses[w] = null;
+          emitBoss();
+        }
       }
     }, 5000);
   }
@@ -157,8 +176,8 @@ module.exports = function createRaidSystem(ctx) {
 
   async function tryStart(uid) {
     const me = meByUser.get(uid);
+    const boss = bosses[me?.world || 'route']; // o boss do mundo em que o jogador está
     if (!boss || boss.busy || starting || !me || raids.has(uid) || isBusy(uid)) return;
-    if (me.world && me.world !== 'route') return; // o boss só existe na Rota
     if (Math.hypot(me.x - boss.x, me.y - boss.y) > TOUCH_R) return;
     const hint = (msg) => { if (Date.now() - (lastHint.get(uid) || 0) > 4000) { lastHint.set(uid, Date.now()); notice(uid, msg); } };
     const g = groups.get(groupOf.get(uid));
@@ -166,7 +185,7 @@ module.exports = function createRaidSystem(ctx) {
     // A raid só começa com o grupo INTEIRO (2, 3 ou 4): nunca com parte dos membros.
     const ready = (id) => {
       const p = meByUser.get(id);
-      return p && (!p.world || p.world === 'route') && Math.hypot(p.x - boss.x, p.y - boss.y) < NEAR_R && !isBusy(id) && !raids.has(id);
+      return p && (p.world || 'route') === boss.world && Math.hypot(p.x - boss.x, p.y - boss.y) < NEAR_R && !isBusy(id) && !raids.has(id);
     };
     const missing = g.members.filter((id) => !ready(id));
     if (missing.length) return hint(`Todos do grupo precisam estar perto do boss para começar. Faltam: ${missing.map((id) => meByUser.get(id)?.username || 'alguém').join(', ')}.`);
@@ -191,9 +210,9 @@ module.exports = function createRaidSystem(ctx) {
         emitBoss();
         return;
       }
-      const level = BOSS_LEVEL;
+      const level = boss.level;
       const avg = Math.round(members.reduce((s, m) => s + m.mine.level, 0) / members.length);
-      if (avg < 60) members.forEach((m) => notice(m.uid, `⚠ ${bossName(boss.species_id)} é Lv.${level} e a média do grupo é Lv.${avg}. Vai ser MUITO difícil!`));
+      if (avg < level * 0.6) members.forEach((m) => notice(m.uid, `⚠ ${bossName(boss.species_id)} é Lv.${level} e a média do grupo é Lv.${avg}. Vai ser MUITO difícil!`));
       const st = calcStats(boss.species_id, level);
       const r = {
         id: nextRid++, boss, members, level, atk: st.attack, def: st.defense, stats: st,
@@ -441,11 +460,11 @@ module.exports = function createRaidSystem(ctx) {
       });
     }
     if (result === 'fail') { // o boss continua lá, com vida cheia
-      boss.busy = false;
-      boss.expiresAt = Math.max(boss.expiresAt, Date.now() + 10 * 60000);
+      r.boss.busy = false;
+      r.boss.expiresAt = Math.max(r.boss.expiresAt, Date.now() + 10 * 60000);
     } else {
       io.emit('notice', { msg: result === 'caught' ? `${winner.username} capturou ${bName}!` : `${bName} fugiu…` });
-      boss = null;
+      bosses[r.boss.world] = null;
     }
     emitBoss();
   }
@@ -462,8 +481,8 @@ module.exports = function createRaidSystem(ctx) {
     if (r.members.every((x) => x.left)) {
       r.done = true;
       clearTimeout(r.timer);
-      boss.busy = false;
-      boss.expiresAt = Math.max(boss.expiresAt, Date.now() + 10 * 60000);
+      r.boss.busy = false;
+      r.boss.expiresAt = Math.max(r.boss.expiresAt, Date.now() + 10 * 60000);
       emitBoss();
       return;
     }
@@ -490,7 +509,10 @@ module.exports = function createRaidSystem(ctx) {
 
   return { bind, onDisconnect, onMove: (uid) => tryStart(uid), inRaid: (uid) => raids.has(uid),
     groupInfo: (uid) => { const g = groups.get(groupOf.get(uid)); return g ? { id: g.id, leader: g.leader, members: [...g.members] } : null; },
-    adminSpawnBoss: (species_id) => (spawnBoss(species_id || undefined, 60 * 60000) ? { ok: true } : { error: 'Há uma raid em andamento' }),
-    bossInfo: () => (boss ? { species_id: boss.species_id, tx: boss.tx, ty: boss.ty, busy: boss.busy, leftMin: Math.max(0, Math.round((boss.expiresAt - Date.now()) / 60000)) } : null),
+    adminSpawnBoss: (species_id, world) => {
+      const wid = BOSS_WORLDS.includes(world) ? world : species_id ? worldOfSpecies(species_id) : 'route';
+      return spawnBoss(wid, species_id || undefined, 60 * 60000, true) ? { ok: true, world: wid } : { error: 'Há uma raid em andamento nesse mundo' };
+    },
+    bossInfo: () => BOSS_WORLDS.filter((w) => bosses[w]).map((w) => { const b = bosses[w]; return { world: w, species_id: b.species_id, level: b.level, tx: b.tx, ty: b.ty, busy: b.busy, leftMin: Math.max(0, Math.round((b.expiresAt - Date.now()) / 60000)) }; }),
     groupMembers: (uid) => { const g = groups.get(groupOf.get(uid)); return g ? [...g.members] : []; } };
 };

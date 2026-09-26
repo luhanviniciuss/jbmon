@@ -13,6 +13,7 @@ model User {
   password_hash String
   x             Float     @default(1600)
   y             Float     @default(1600)
+  world         String    @default("route") // mundo onde o jogador está: route | town | ice | lava
   role          String    @default("player") // "player" ou "admin" (só se concede pelo servidor: npm run make-admin)
   banned_until  DateTime? // conta banida até esta data (9999 = permanente)
   ban_reason    String?

@@ -6,7 +6,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Server } = require('socket.io');
 const { PrismaClient } = require('@prisma/client');
-const { MAP_W, TILE, PLAYER_SPEED, CLEAR_MIN, CLEAR_MAX, LAB, generateMap } = require('../public/map.js');
+const { MAP_W, TILE, PLAYER_SPEED, CLEAR_MIN, CLEAR_MAX, GYM, LABS, PORTAL, ARRIVE, GYM_EXIT, WORLDS, WORLD_IDS, generateMap } = require('../public/map.js');
+const createWorld = require('./world.js');
 const { SPECIES, WILD_TABLE, WATER_TABLE, calcStats, minLevel } = require('../public/species.js');
 const { BALLS, RECIPES } = require('../public/items.js');
 const { pickSpecies, makeWild, resolveTurn, mineView, wildView, teamView } = require('./battle.js');
@@ -25,17 +26,13 @@ const { startBackups } = require('./backup.js');
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 const MAP_PX = MAP_W * TILE;
-const MAP = generateMap();
+const MAP = generateMap('route');
 const SPAWN = { x: 1600, y: 1600 };
 
 // Anti-cheat: orçamento de distância que recarrega com a velocidade máxima (+25% de tolerância)
 const MAX_SPEED = PLAYER_SPEED * 1.25;
 const BUDGET_CAP = 48; // px de rajada permitida (jitter de rede)
 const MAX_STRIKES = 20;
-const isBlocked = (x, y) => {
-  const t = MAP[Math.floor(y / TILE)]?.[Math.floor(x / TILE)];
-  return t === undefined || t === 2 || t === 3;
-};
 
 // Encontros
 const STARTERS = [1, 4, 7]; // Bulbasaur, Charmander, Squirtle
@@ -59,108 +56,16 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// ---------- Pokémon selvagens no mapa (autoritativo) ----------
+// ---------- Mundos (Rota, Cidade, Gelo, Lava): cada um com seu mapa e seus Pokémon selvagens ----------
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const inClearing = (tx, ty) => tx >= CLEAR_MIN - 1 && tx <= CLEAR_MAX + 1 && ty >= CLEAR_MIN - 1 && ty <= CLEAR_MAX + 1;
-const grassTiles = [];
-MAP.forEach((row, y) => row.forEach((t, x) => { if (t === 4 && !inClearing(x, y)) grassTiles.push([x, y]); }));
-const wilds = new Map(); // id -> { id, species_id, level, tx, ty, homeX, homeY, x, y, busy }
 let nextWildId = 1;
-// Nível cresce com a distância do Centro: ~5 perto, ~30 a 40 no meio do mapa e até 60 nos cantos (treino até o 60)
-const WILD_MAX_LEVEL = 60; // teto dos selvagens comuns (os lendários são sempre 100)
-const wildLevelAt = (tx, ty) => Math.max(2, Math.round(1 + Math.hypot(tx - 50, ty - 50) * 0.9) + rand(-2, 3));
-const LEGENDARY_LEVEL = 100; // todos os lendários são nível 100
-const shoreWater = []; // tiles de água encostados em terra: onde os Pokémon aquáticos vivem
-MAP.forEach((row, y) => row.forEach((t, x) => {
-  if (t !== 2) return;
-  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
-    const n = MAP[y + dy]?.[x + dx];
-    if (n === 0 || n === 1 || n === 4) { shoreWater.push([x, y]); return; }
-  }
-}));
-const wildPublic = (w) => ({ id: w.id, species_id: w.species_id, level: w.level, x: w.x, y: w.y, water: !!w.water });
-
-function spawnWild(water = false) {
-  const table = water ? WATER_TABLE : WILD_TABLE;
-  const pool = water ? shoreWater : grassTiles;
-  let id = pickSpecies(table);
-  // No máximo um de cada lendário vivo no mapa
-  for (let i = 0; i < 10 && SPECIES[id].rarity === 'legendary' && [...wilds.values()].some((w) => w.species_id === id); i++) id = pickSpecies(table);
-  const rarity = SPECIES[id].rarity;
-  let tile;
-  for (let i = 0; i < 300; i++) {
-    tile = pool[rand(0, pool.length - 1)];
-    const d = Math.hypot(tile[0] - 50, tile[1] - 50);
-    if (rarity === 'legendary' ? d >= 40 : Math.random() < 0.6 || d < 30) break; // lendários só longe do centro
-  }
-  const [tx, ty] = tile;
-  let level = rarity === 'legendary' ? LEGENDARY_LEVEL : Math.min(WILD_MAX_LEVEL, wildLevelAt(tx, ty) + LEVEL_BONUS[rarity]);
-  // Formas evoluídas nunca aparecem abaixo do nível em que a pré-evolução evolui (Pikachu >= 16, Raichu >= 32...)
-  if (level < minLevel(id)) level = minLevel(id) + rand(0, 3);
-  const w = { id: nextWildId++, species_id: id, level, water, tx, ty, homeX: tx, homeY: ty, x: tx * TILE + TILE / 2, y: ty * TILE + TILE / 2, busy: false };
-  wilds.set(w.id, w);
-  return w;
-}
-if (grassTiles.length) for (let i = 0; i < WILD_COUNT; i++) spawnWild();
-if (shoreWater.length) for (let i = 0; i < WATER_COUNT; i++) spawnWild(true);
-console.log(`${wilds.size} Pokémon selvagens (${grassTiles.length} tiles de grama alta)`);
-
-// Spawn manual (painel admin): coloca `count` Pokémon da espécie/nível pedidos ao redor do ponto (tx, ty)
-function spawnAdminWild({ species_id, level, count, tx, ty, water, ttlMs }) {
-  const made = [];
-  const taken = new Set();
-  const spot = () => {
-    for (let r = 0; r <= 12; r++) {
-      for (let dy = -r; dy <= r; dy++) {
-        for (let dx = -r; dx <= r; dx++) {
-          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-          const x = tx + dx, y = ty + dy, t = MAP[y]?.[x];
-          if (t === undefined || taken.has(x + ',' + y)) continue;
-          if (water ? t === 2 : t !== 2 && t !== 3) return [x, y];
-        }
-      }
-      if (r === 12) return null;
-    }
-    return null;
-  };
-  for (let i = 0; i < count; i++) {
-    const p = spot();
-    if (!p) break;
-    taken.add(p[0] + ',' + p[1]);
-    const w = { id: nextWildId++, species_id, level, water, tx: p[0], ty: p[1], homeX: p[0], homeY: p[1], x: p[0] * TILE + TILE / 2, y: p[1] * TILE + TILE / 2, busy: false, admin: true, expiresAt: Date.now() + ttlMs };
-    wilds.set(w.id, w);
-    io.emit('wild:add', wildPublic(w));
-    made.push(w);
-  }
-  return made;
-}
-function clearAdminWilds() {
-  let n = 0;
-  for (const w of [...wilds.values()]) if (w.admin && !w.busy) { wilds.delete(w.id); io.emit('wild:remove', w.id); n++; }
-  return n;
-}
-
-const releaseWild = (w) => { w.busy = false; io.emit('wild:add', wildPublic(w)); }; // fugiu/perdeu: volta ao mapa
-const defeatWild = (w) => { // venceu/capturou: some e um novo nasce depois (os spawnados por admin não têm substituto)
-  wilds.delete(w.id);
-  if (w.admin) return;
-  setTimeout(() => io.emit('wild:add', wildPublic(spawnWild(!!w.water))), RESPAWN_MS);
-};
-
-setInterval(() => { // vagueiam perto de casa
-  const moved = [];
-  for (const w of wilds.values()) {
-    if (w.expiresAt && Date.now() > w.expiresAt && !w.busy) { wilds.delete(w.id); io.emit('wild:remove', w.id); continue; } // spawn de admin expirou
-    if (w.busy || Math.random() > 0.35) continue;
-    const [dx, dy] = [[1, 0], [-1, 0], [0, 1], [0, -1]][rand(0, 3)];
-    const nx = w.tx + dx, ny = w.ty + dy, t = MAP[ny]?.[nx];
-    if (w.water ? t !== 2 : t === undefined || t === 2 || t === 3 || inClearing(nx, ny)) continue; // aquáticos ficam na água
-    if (Math.abs(nx - w.homeX) > WILD_WANDER || Math.abs(ny - w.homeY) > WILD_WANDER) continue;
-    Object.assign(w, { tx: nx, ty: ny, x: nx * TILE + TILE / 2, y: ny * TILE + TILE / 2 });
-    moved.push({ id: w.id, x: w.x, y: w.y });
-  }
-  if (moved.length) io.emit('wild:update', moved);
-}, 1000);
+const W = {}; // id do mundo -> mundo
+for (const wid of WORLD_IDS) W[wid] = createWorld({ io, id: wid, MAP: wid === 'route' ? MAP : generateMap(wid), newId: () => nextWildId++ });
+const releaseWild = (w) => W[w.worldId].releaseWild(w);
+const defeatWild = (w) => W[w.worldId].defeatWild(w);
+const isBlocked = (x, y, world = 'route') => W[world].isBlocked(x, y);
+const allWilds = () => WORLD_IDS.flatMap((wid) => [...W[wid].wilds.values()]);
 
 const invOf = (u) => ({ poke: u.pokeballs, great: u.greatballs, ultra: u.ultraballs, master: u.masterballs });
 const matsOf = (u) => ({ apricorns: u.apricorns, shards: u.shards });
@@ -170,7 +75,7 @@ const battlingUsers = new Set(); // ids em batalha (bloqueia o craft)
 app.get('/healthz', async (req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
-    res.json({ ok: true, players: players.size, wilds: wilds.size });
+    res.json({ ok: true, players: players.size, wilds: allWilds().length });
   } catch (e) {
     res.status(503).json({ ok: false });
   }
@@ -278,7 +183,7 @@ async function savePosition(p, force = false) {
   if (!force && p.sx === p.x && p.sy === p.y) return; // só grava se mudou desde a última vez
   const { x, y } = p;
   try {
-    await retry(() => prisma.user.update({ where: { id: p.id }, data: { x, y } }));
+    await retry(() => prisma.user.update({ where: { id: p.id }, data: { x, y, world: p.world } }));
     p.sx = x;
     p.sy = y;
   } catch (e) {
@@ -296,18 +201,38 @@ function markCombat(uid, kind) {
   io.emit('player:combat', { id: uid, combat: next });
 }
 const meByUser = new Map(); // uid -> { id, username, x, y }
-function teleportTo(uid, x, y) {
+// Troca o jogador de mundo: sai da sala do mundo antigo, entra na do novo e recebe jogadores e selvagens de lá.
+function changeWorld(uid, worldId, x, y) {
+  const me = meByUser.get(uid);
+  const sock = socketByUser.get(uid);
+  if (!me || !sock || !W[worldId]) return false;
+  if (me.world === worldId) return teleportTo(uid, x, y);
+  sock.to('w:' + me.world).emit('player:left', me.id, true);
+  sock.leave('w:' + me.world);
+  me.world = worldId;
+  me.x = x;
+  me.y = y;
+  me.hidden = false;
+  me.inside = null;
+  sock.join('w:' + worldId);
+  sock.to('w:' + worldId).emit('player:joined', me, true);
+  sock.emit('world:enter', { world: worldId, x, y, others: [...players.values()].filter((p) => p.world === worldId && p.id !== me.id), wilds: W[worldId].publicList() });
+  savePosition(me, true);
+  return true;
+}
+function teleportTo(uid, x, y, worldId) {
   const me = meByUser.get(uid);
   if (!me) return false;
+  if (worldId && worldId !== me.world) return changeWorld(uid, worldId, x, y);
   me.x = x;
   me.y = y;
   const sock = socketByUser.get(uid);
   sock?.emit('player:correct', { x, y });
-  sock?.broadcast.emit('player:moved', { id: me.id, x, y, dir: me.dir });
+  sock?.to('w:' + me.world).emit('player:moved', { id: me.id, x, y, dir: me.dir });
   savePosition(me, true);
   return true;
 }
-const teleportHome = (uid) => teleportTo(uid, SPAWN.x, SPAWN.y);
+const teleportHome = (uid) => teleportTo(uid, SPAWN.x, SPAWN.y, 'route');
 const raidSys = createRaidSystem({
   io, prisma, MAP, socketByUser, meByUser, teleportHome,
   clearing: inClearing,
@@ -318,12 +243,17 @@ const raidSys = createRaidSystem({
 registerAdmin({
   app, prisma, auth, moderation, io, socketByUser, meByUser, raidSys, teleportTo, nextFreeSlot, invOf, TILE,
   isBusy: (uid) => battlingUsers.has(uid),
-  world: { wilds, spawnAdminWild, clearAdminWilds, isWalkable: (tx, ty) => { const t = MAP[ty]?.[tx]; return t !== undefined && t !== 2 && t !== 3; } },
+  world: {
+    allWilds,
+    spawnAdminWild: (opts, wid) => W[W[wid] ? wid : 'route'].spawnAdminWild(opts),
+    clearAdminWilds: () => WORLD_IDS.reduce((n, wid) => n + W[wid].clearAdminWilds(), 0),
+    isWalkable: (tx, ty, wid) => W[W[wid] ? wid : 'route'].isWalkable(tx, ty),
+  },
 });
 
 const clans = createClans({ app, prisma, auth, io, socketByUser, meByUser });
 const pvp = createPvp({
-  biomeOf: (uid) => { const m = meByUser.get(uid); return m ? biomeAt(MAP, TILE, m.x, m.y, { town: inClearing(Math.floor(m.x / TILE), Math.floor(m.y / TILE)) }) : 'field'; },
+  biomeOf: (uid) => { const m = meByUser.get(uid); if (!m) return 'field'; return WORLDS[m.world]?.biome || biomeAt(MAP, TILE, m.x, m.y, { town: inClearing(Math.floor(m.x / TILE), Math.floor(m.y / TILE)) }); },
   app, prisma, auth, io, socketByUser, meByUser, loadTeam, durable, markCombat,
   groupInfo: raidSys.groupInfo, clanSync: clans.refreshClan,
   isBusy: (uid) => battlingUsers.has(uid) || raidSys.inRaid(uid) || !!meByUser.get(uid)?.hidden,
@@ -353,11 +283,12 @@ io.on('connection', (socket) => {
   // Evita sessão duplicada da mesma conta
   for (const [sid, p] of players) if (p.id === u.id) io.sockets.sockets.get(sid)?.disconnect(true);
 
-  const me = { id: u.id, username: u.username, x: u.x, y: u.y, dir: 'down', combat: null, hidden: false, role: u.role, clan: socket.data.clan ? { ...socket.data.clan, role: u.clan_role } : null };
-  if (isBlocked(me.x, me.y)) { me.x = SPAWN.x; me.y = SPAWN.y; }
+  const me = { id: u.id, username: u.username, x: u.x, y: u.y, dir: 'down', combat: null, hidden: false, inside: null, world: WORLDS[u.world] ? u.world : 'route', role: u.role, clan: socket.data.clan ? { ...socket.data.clan, role: u.clan_role } : null };
+  if (W[me.world].isBlocked(me.x, me.y)) { const sp = WORLDS[me.world].spawn; me.x = sp.x; me.y = sp.y; }
   players.set(socket.id, me);
   socketByUser.set(u.id, socket);
   meByUser.set(u.id, me);
+  socket.join('w:' + me.world);
   raidSys.bind(socket, u.id);
   chat.bind(socket, u.id);
   pvp.bind(socket, u.id);
@@ -367,10 +298,10 @@ io.on('connection', (socket) => {
     self: me,
     balls: invOf(u),
     mats: matsOf(u),
-    others: [...players.entries()].filter(([sid]) => sid !== socket.id).map(([, p]) => p),
+    others: [...players.entries()].filter(([sid, p]) => sid !== socket.id && p.world === me.world).map(([, p]) => p),
   });
-  socket.emit('wild:list', [...wilds.values()].filter((w) => !w.busy).map(wildPublic));
-  socket.broadcast.emit('player:joined', me);
+  socket.emit('wild:list', W[me.world].publicList());
+  socket.to('w:' + me.world).emit('player:joined', me);
   io.emit('online', players.size);
 
   // ----- Batalha (estado autoritativo no servidor) -----
@@ -406,14 +337,14 @@ io.on('connection', (socket) => {
     setBusy(true);
     markCombat(u.id, 'wild');
     w.busy = true;
-    io.emit('wild:remove', w.id);
+    io.to('w:' + w.worldId).emit('wild:remove', w.id);
     try {
       const team = await loadTeam(prisma, u.id);
       const mine = team.find((p) => p.current_hp > 0);
       const fresh = await prisma.user.findUnique({ where: { id: u.id } });
       if (!mine || socket.disconnected) return releaseWild(w);
       battle = { team, mine, world: w, wild: makeWild(w.species_id, w.level), inv: invOf(fresh) };
-      socket.emit('battle:start', { biome: biomeAt(MAP, TILE, w.x, w.y, { water: !!w.water }), wild: wildView(battle.wild), mine: mineView(mine), balls: battle.inv, team: team.map(mineView) });
+      socket.emit('battle:start', { biome: WORLDS[w.worldId].biome || biomeAt(MAP, TILE, w.x, w.y, { water: !!w.water }), wild: wildView(battle.wild), mine: mineView(mine), balls: battle.inv, team: team.map(mineView) });
     } catch (err) {
       console.error('Falha ao iniciar batalha', err.message);
       releaseWild(w);
@@ -423,10 +354,10 @@ io.on('connection', (socket) => {
     }
   }
 
-  // ----- Laboratório do Centro Pokémon: entrar, curar (15 s) e sair. O servidor manda: confere que o jogador está
-  // dentro, roda o temporizador e só depois grava a cura. Enquanto está no laboratório o jogador fica oculto no mapa.
-  const doorC = { x: (LAB.doorX + 0.5) * TILE, y: (LAB.doorY + 0.5) * TILE };
-  const labExit = { x: doorC.x, y: (LAB.doorY + 1.5) * TILE }; // logo abaixo da porta
+  // ----- Interiores: laboratório do Centro Pokémon (cura de 15 s) e ginásio (portais para os outros mundos).
+  // O servidor manda: confere a porta, roda o temporizador e só então grava a cura. Dentro de um interior o jogador some do mapa.
+  const doorOf = (b) => ({ x: (b.doorX + 0.5) * TILE, y: (b.doorY + 0.5) * TILE });
+  const exitOf = (b) => ({ x: (b.doorX + 0.5) * TILE, y: (b.doorY + 1.5) * TILE }); // logo abaixo da porta
   let labTimer = null;
   let labBusy = false;
 
@@ -444,19 +375,47 @@ io.on('connection', (socket) => {
     return { healed: hurt.length, balls: invOf({ ...usr, pokeballs }) };
   }
 
-  socket.on('lab:enter', () => {
-    if (me.hidden || battle || starting || raidSys.inRaid(u.id) || pvp.inMatch(u.id)) return;
-    if (Math.hypot(me.x - doorC.x, me.y - doorC.y) > TILE * 1.3) return; // precisa estar na porta
+  function enterInterior(kind, b) {
+    if (me.hidden || battle || starting || raidSys.inRaid(u.id) || pvp.inMatch(u.id)) return false;
+    const d = doorOf(b);
+    if (Math.hypot(me.x - d.x, me.y - d.y) > TILE * 1.3) return false; // precisa estar na porta
+    const ex = exitOf(b);
     me.hidden = true;
-    me.x = labExit.x; // ao sair (ou reconectar) aparece na frente da porta, nunca dentro do prédio
-    me.y = labExit.y;
-    socket.broadcast.emit('player:hide', { id: me.id, hidden: true });
+    me.inside = kind;
+    me.x = ex.x; // ao sair (ou reconectar) aparece na frente da porta, nunca dentro do prédio
+    me.y = ex.y;
+    socket.to('w:' + me.world).emit('player:hide', { id: me.id, hidden: true });
     savePosition(me, true);
-    socket.emit('lab:entered');
+    return true;
+  }
+
+  function leaveInterior(kind, ev) {
+    if (!me.hidden || me.inside !== kind) return;
+    if (labTimer) socket.emit('notice', { msg: 'Cura cancelada: você saiu do laboratório.' });
+    clearTimeout(labTimer);
+    labTimer = null;
+    const ex = exitOf(kind === 'lab' ? LABS[me.world] : GYM);
+    me.hidden = false;
+    me.inside = null;
+    immuneUntil = Date.now() + IMMUNE_MS;
+    socket.to('w:' + me.world).emit('player:hide', { id: me.id, hidden: false });
+    teleportTo(u.id, ex.x, ex.y);
+    socket.emit(ev);
+  }
+
+  socket.on('lab:enter', () => { const b = LABS[me.world]; if (b && enterInterior('lab', b)) socket.emit('lab:entered'); });
+  socket.on('lab:exit', () => leaveInterior('lab', 'lab:exited'));
+  socket.on('gym:enter', () => { if (me.world === 'route' && enterInterior('gym', GYM)) socket.emit('gym:entered'); });
+  socket.on('gym:exit', () => leaveInterior('gym', 'gym:exited'));
+  socket.on('gym:travel', (dest) => { // portal do ginásio -> outro mundo
+    if (me.inside !== 'gym' || !['town', 'ice', 'lava'].includes(dest)) return;
+    immuneUntil = Date.now() + IMMUNE_MS;
+    socket.emit('gym:left');
+    changeWorld(u.id, dest, ARRIVE.x, ARRIVE.y);
   });
 
   socket.on('lab:heal', async () => {
-    if (!me.hidden || labTimer || labBusy) return;
+    if (!me.hidden || me.inside !== 'lab' || labTimer || labBusy) return;
     labBusy = true;
     try {
       const team = await loadTeam(prisma, u.id);
@@ -466,7 +425,7 @@ io.on('connection', (socket) => {
       socket.emit('lab:healing', { ms: LAB_HEAL_MS });
       labTimer = setTimeout(async () => {
         labTimer = null;
-        if (!me.hidden || socket.disconnected) return; // saiu no meio: cura cancelada
+        if (!me.hidden || me.inside !== 'lab' || socket.disconnected) return; // saiu no meio: cura cancelada
         try { socket.emit('lab:healed', await healNow()); } catch (e) { console.error('Falha ao curar', e.message); socket.emit('notice', { msg: 'Falha ao curar. Tente de novo.' }); }
       }, LAB_HEAL_MS);
     } catch (e) {
@@ -474,18 +433,6 @@ io.on('connection', (socket) => {
     } finally {
       labBusy = false;
     }
-  });
-
-  socket.on('lab:exit', () => {
-    if (!me.hidden) return;
-    if (labTimer) socket.emit('notice', { msg: 'Cura cancelada: você saiu do laboratório.' });
-    clearTimeout(labTimer);
-    labTimer = null;
-    me.hidden = false;
-    immuneUntil = Date.now() + IMMUNE_MS;
-    socket.broadcast.emit('player:hide', { id: me.id, hidden: false });
-    teleportTo(u.id, labExit.x, labExit.y);
-    socket.emit('lab:exited');
   });
 
   socket.on('battle:action', async (type) => {
@@ -496,8 +443,7 @@ io.on('connection', (socket) => {
       const r = resolveTurn(b, type);
       if (r.result === 'lose') {
         b.team.forEach((p) => (p.current_hp = p.hp)); // desmaiou: cura e volta ao Centro
-        me.x = SPAWN.x;
-        me.y = SPAWN.y;
+        if (me.world === 'route') { me.x = SPAWN.x; me.y = SPAWN.y; }
       }
       // Tudo do turno (HP/EXP/evolução, bolas gastas, materiais e o Pokémon capturado) numa transação só,
       // gravada ANTES de avisar o jogador do resultado.
@@ -514,8 +460,11 @@ io.on('connection', (socket) => {
         markCombat(u.id, null);
         lastTile = '';
         if (r.result === 'lose') {
-          socket.emit('player:correct', { x: me.x, y: me.y });
-          socket.broadcast.emit('player:moved', { id: me.id, x: me.x, y: me.y, dir: me.dir });
+          if (me.world !== 'route') changeWorld(u.id, 'route', SPAWN.x, SPAWN.y); // derrota nos mundos extras: volta ao Centro da Rota
+          else {
+            socket.emit('player:correct', { x: me.x, y: me.y });
+            socket.to('w:' + me.world).emit('player:moved', { id: me.id, x: me.x, y: me.y, dir: me.dir });
+          }
         }
       }
     } catch (e) {
@@ -538,7 +487,7 @@ io.on('connection', (socket) => {
     if (battle || starting || raidSys.inRaid(u.id) || pvp.inMatch(u.id)) return socket.emit('player:correct', { x: me.x, y: me.y }); // parado em batalha
 
     const dist = Math.hypot(x - me.x, y - me.y);
-    if (dist > budget || isBlocked(x, y)) {
+    if (dist > budget || W[me.world].isBlocked(x, y)) {
       // Movimento impossível: ignora e devolve a posição autoritativa ao cliente
       if (++strikes >= MAX_STRIKES) return socket.disconnect(true);
       return socket.emit('player:correct', { x: me.x, y: me.y });
@@ -548,14 +497,19 @@ io.on('connection', (socket) => {
     me.x = clamp(x);
     me.y = clamp(y);
     me.dir = dir || me.dir;
-    socket.broadcast.emit('player:moved', { id: me.id, x: me.x, y: me.y, dir: me.dir });
+    socket.to('w:' + me.world).emit('player:moved', { id: me.id, x: me.x, y: me.y, dir: me.dir });
 
     const tx = Math.floor(me.x / TILE);
     const ty = Math.floor(me.y / TILE);
     const key = `${tx},${ty}`;
+    if (me.world !== 'route' && tx === PORTAL.tx && ty === PORTAL.ty) { // portal de volta: leva para a frente do ginásio, na Rota
+      immuneUntil = now + IMMUNE_MS;
+      changeWorld(u.id, 'route', GYM_EXIT.x, GYM_EXIT.y);
+      return;
+    }
     raidSys.onMove(u.id);
     if (now >= immuneUntil && !battle && !starting && !raidSys.inRaid(u.id)) {
-      for (const w of wilds.values()) {
+      for (const w of W[me.world].wilds.values()) {
         if (!w.busy && Math.hypot(me.x - w.x, me.y - w.y) < (w.water ? WATER_TOUCH : TOUCH_RADIUS)) { startBattle(w); return; }
       }
     }
@@ -570,7 +524,7 @@ io.on('connection', (socket) => {
     if (socketByUser.get(u.id) === socket) { socketByUser.delete(u.id); meByUser.delete(u.id); }
     setBusy(false);
     players.delete(socket.id);
-    io.emit('player:left', me.id);
+    io.to('w:' + me.world).emit('player:left', me.id);
     io.emit('online', players.size);
     await savePosition(me, true);
   });

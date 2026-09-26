@@ -16,6 +16,8 @@ server/raid.js         Grupos, boss lendário a cada 3 h e raid cooperativa
 server/chat.js         Chat global, de grupo e sussurros
 server/clan.js         Clãs: criar, convidar, cargos, ranking (/api/clan/*)
 public/lab.js           Cena do laboratório de cura (LabScene)
+public/gym.js           Cena do ginásio com portais (GymScene)
+server/world.js         Um mundo: mapa, Pokémon selvagens e respawn
 server/voip.js         Sinalização da voz do grupo (WebRTC)
 public/settings.js     Configurações e VoIP do grupo
 server/pvp.js          PvP solo, de grupo e guerra de clãs; rating (/api/pvp/*)
@@ -90,6 +92,17 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 - **Punições**: o ban impede login, uso da API e conexão do socket (mesmo com token antigo), expulsa o jogador na hora e **sobrevive a reinícios** (colunas `banned_until` / `muted_until`). Silenciados não conseguem falar em nenhum canal e recebem o motivo. Admins não podem ser banidos/silenciados por outros admins nem por si mesmos.
 - **Auditoria**: toda ação fica na tabela `AdminLog` (quem, o quê, alvo e detalhes).
 - **Selo ADM** no chat e nomes reservados (`admin`, `moderador`, `gm`, `sistema`…) que jogadores comuns não conseguem registrar.
+
+## Ginásio e mundos extras
+- **Ginásio** (Rota, a leste do Centro Pokémon): pisar na porta leva ao **salão do ginásio** (`GymScene`, `public/gym.js`), com três **portais**: **Cidade**, **Bioma de Gelo** e **Vulcão**. Caminhe até um portal para viajar; a porta verde de baixo volta à Rota.
+- **Mundos** (cada um com 100x100 tiles, gerados por `generateMap(mundo)` em `public/map.js`, iguais no servidor e no cliente):
+  - **Cidade**: pavimento de pedra, praça com fonte, casas coloridas e um **Centro Pokémon próprio** (laboratório de cura de 15 s). Segura: sem Pokémon selvagens.
+  - **Bioma de Gelo**: chão de neve, gelo liso, blocos de gelo, lago congelado e neve funda (encontros); neve caindo e tom frio. Selvagens de **Gelo/Água** (Smoochum, Sneasel, Jynx, Seel, Dewgong, Shellder, Cloyster, Lapras… e lendários Articuno/Regice), **Lv. 80 a 200**.
+  - **Vulcão**: rocha escura, cinzas, rios de lava, rochas e chão quente com fissuras brilhando; brasas subindo e calor pulsando. Selvagens de **Fogo/Terra/Pedra** (Charmander, Vulpix, Growlithe, Ponyta, Magmar, Houndour, Geodude, Onix, Rhyhorn, Larvitar… e Moltres/Entei/Ho-Oh), **Lv. 300 a 500**.
+- **Níveis por mundo**: Rota (clássica) até **60**; Bioma de Gelo **80–200**; Vulcão **300–500**. **Nível máximo: 1000** para qualquer Pokémon (a curva de EXP continua a mesma e o EXP dos selvagens cresce com o nível deles). Os **lendários de cada mundo** aparecem sempre no **nível máximo daquele mundo** (Gelo: Articuno, Regice e Suicune no Lv. 200; Vulcão: Moltres, Entei, Ho-Oh, Groudon e Regirock no Lv. 500; Rota: Lv. 100). Os selvagens ficam mais fortes conforme a distância do centro, e o ginásio mostra o nível de cada portal — treine antes de entrar.
+- **Portal de volta**: em cada mundo extra há um portal ("Portal do Ginásio") 4 tiles a oeste da chegada; pisar nele leva para a frente do ginásio, na Rota.
+- **Como funciona**: cada mundo é uma sala do Socket.io (`w:<mundo>`): só quem está nele vê seus jogadores e selvagens (`server/world.js`: mapa, spawn, respawn e vagar dos selvagens por mundo). O servidor valida a porta, troca o mundo e **salva o mundo do jogador** (coluna `User.world`): ao voltar ele reaparece onde estava. O boss lendário e as raids acontecem só na Rota. Perder uma batalha nos mundos extras leva ao Centro da Rota.
+- **Cenário da batalha** também muda: **Neve** no Gelo, **Vulcão** no Vulcão e a **Praça** na Cidade (PvP). O painel admin cria selvagens no mundo em que o admin está e o teletransporte entre jogadores leva junto o mundo.
 
 ## Efeitos de golpe e cenários de batalha
 - **Efeitos por tipo** (`public/fx.js`, motor de partículas em canvas): cada um dos 17 tipos tem o seu roteiro — Fogo (bola de chamas e explosão), Água (jato e respingo com ondas), Elétrico (raios ramificados e clarão), Planta (folhas em espiral), Gelo (estilhaços e cristal), Lutador (socos com ondas de choque), Veneno (bolhas e poça), Terra (fissuras, pedras e poeira com tremor forte), Voador (cortes de vento e penas), Psíquico (anéis e espiral), Inseto (enxame), Pedra (chuva de pedras), Fantasma (fogos-fátuos), Dragão (chamas em hélice) , Sombrio (fumaça e garras) , Aço (corte em X e faíscas) e Normal (impacto). Golpes **críticos** ficam maiores, com mais partículas e clarão; o atacante avança (golpes físicos) e aparece o **dano flutuante** (dourado = super efetivo, cinza = pouco efetivo).

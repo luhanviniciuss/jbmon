@@ -1,7 +1,7 @@
 // Painel de administração (API REST /api/admin/*).
 // Regras: toda rota exige JWT válido E papel 'admin' lido do BANCO a cada chamada (nada vem do cliente);
 // admins não podem ser silenciados/banidos por outros admins; toda ação é registrada na auditoria (AdminLog).
-const { SPECIES, WILD_TABLE, WATER_TABLE, calcStats } = require('../public/species.js');
+const { SPECIES, WILD_TABLE, WATER_TABLE, MAX_LEVEL, calcStats } = require('../public/species.js');
 const { BALLS } = require('../public/items.js');
 
 const FOREVER = new Date('9999-12-31T00:00:00Z');
@@ -49,10 +49,10 @@ module.exports = function registerAdmin(ctx) {
       combat: m.combat || null, muted: !!moderation.muteOf(m.id),
     })).sort((a, b) => a.username.localeCompare(b.username));
     let adminWilds = 0;
-    for (const w of world.wilds.values()) if (w.admin) adminWilds++;
+    for (const w of world.allWilds()) if (w.admin) adminWilds++;
     res.json({
       online,
-      stats: { uptimeSec: Math.round((Date.now() - started) / 1000), online: online.length, wilds: world.wilds.size, adminWilds, memMB: Math.round(process.memoryUsage().rss / 1048576), boss: raidSys.bossInfo() },
+      stats: { uptimeSec: Math.round((Date.now() - started) / 1000), online: online.length, wilds: world.allWilds().length, adminWilds, memMB: Math.round(process.memoryUsage().rss / 1048576), boss: raidSys.bossInfo() },
     });
   });
 
@@ -130,10 +130,10 @@ module.exports = function registerAdmin(ctx) {
   // ---------------- mundo: spawn de Pokémon e boss ----------------
   route('post', '/spawn', async (req, res) => {
     const species_id = int(req.body.species_id, 1, 999);
-    const level = int(req.body.level, 1, 100);
+    const level = int(req.body.level, 1, MAX_LEVEL);
     const count = int(req.body.count ?? 1, 1, 25);
     const ttl = int(req.body.ttl_min ?? 30, 1, 240);
-    if (!species_id || !SPECIES[species_id] || !level || !count || !ttl) return res.status(400).json({ error: 'Espécie, nível (1-100), quantidade (1-25) ou duração inválidos' });
+    if (!species_id || !SPECIES[species_id] || !level || !count || !ttl) return res.status(400).json({ error: 'Espécie, nível (1-' + MAX_LEVEL + '), quantidade (1-25) ou duração inválidos' });
     let tx, ty;
     if (req.body.x != null && req.body.y != null) { tx = int(req.body.x, 0, 99); ty = int(req.body.y, 0, 99); if (tx == null || ty == null) return res.status(400).json({ error: 'Coordenadas inválidas (0 a 99)' }); }
     else {
@@ -142,7 +142,7 @@ module.exports = function registerAdmin(ctx) {
       tx = Math.floor(me.x / TILE); ty = Math.floor(me.y / TILE);
     }
     const water = req.body.water != null ? !!req.body.water : WATER_ONLY.has(species_id);
-    const made = world.spawnAdminWild({ species_id, level, count, tx, ty, water, ttlMs: ttl * 60000 });
+    const made = world.spawnAdminWild({ species_id, level, count, tx, ty, water, ttlMs: ttl * 60000 }, meByUser.get(req.admin.id)?.world);
     if (!made.length) return res.status(409).json({ error: 'Não achei espaço livre perto desse ponto' });
     await audit(req.admin, 'spawn', SPECIES[species_id].name, { level, count: made.length, tile: [tx, ty], water });
     res.json({ ok: true, created: made.length, ids: made.map((w) => w.id) });
@@ -167,8 +167,8 @@ module.exports = function registerAdmin(ctx) {
   route('post', '/give-pokemon', async (req, res) => {
     const u = await target(req, res, { allowAdmin: true, allowSelf: true }); if (!u) return;
     const species_id = int(req.body.species_id, 1, 999);
-    const level = int(req.body.level, 1, 100);
-    if (!species_id || !SPECIES[species_id] || !level) return res.status(400).json({ error: 'Espécie ou nível (1-100) inválido' });
+    const level = int(req.body.level, 1, MAX_LEVEL);
+    if (!species_id || !SPECIES[species_id] || !level) return res.status(400).json({ error: 'Espécie ou nível (1-' + MAX_LEVEL + ') inválido' });
     const st = calcStats(species_id, level);
     const slot = await nextFreeSlot(prisma, u.id);
     await prisma.pokemon.create({ data: { user_id: u.id, species_id, level, hp: st.hp, attack: st.attack, defense: st.defense, current_hp: st.hp, slot } });
@@ -207,7 +207,7 @@ module.exports = function registerAdmin(ctx) {
     if (!adminMe) return res.status(409).json({ error: 'Entre no mundo para se teletransportar' });
     if (req.body.mode === 'xy') {
       const tx = int(req.body.x, 0, 99), ty = int(req.body.y, 0, 99);
-      if (tx == null || ty == null || !world.isWalkable(tx, ty)) return res.status(400).json({ error: 'Ponto inválido ou bloqueado' });
+      if (tx == null || ty == null || !world.isWalkable(tx, ty, adminMe?.world)) return res.status(400).json({ error: 'Ponto inválido ou bloqueado' });
       if (isBusy(req.admin.id)) return res.status(409).json({ error: 'Você está em combate' });
       teleportTo(req.admin.id, tx * TILE + TILE / 2, ty * TILE + TILE / 2);
       await audit(req.admin, 'teleport', 'xy', { tx, ty });
@@ -218,11 +218,11 @@ module.exports = function registerAdmin(ctx) {
     if (!them) return res.status(409).json({ error: 'Jogador não está online' });
     if (req.body.mode === 'bring') {
       if (isBusy(u.id)) return res.status(409).json({ error: 'O jogador está em combate' });
-      teleportTo(u.id, adminMe.x, adminMe.y);
+      teleportTo(u.id, adminMe.x, adminMe.y, adminMe.world);
       say(u.id, '✨ Um administrador puxou você até ele.');
     } else {
       if (isBusy(req.admin.id)) return res.status(409).json({ error: 'Você está em combate' });
-      teleportTo(req.admin.id, them.x, them.y);
+      teleportTo(req.admin.id, them.x, them.y, them.world);
     }
     await audit(req.admin, req.body.mode === 'bring' ? 'bring' : 'teleport-to', u.username);
     res.json({ ok: true });

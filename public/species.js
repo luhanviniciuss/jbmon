@@ -197,6 +197,21 @@ const WATER_TABLE = [
   [138, 1], [140, 1], [131, 0.7],
   [245, 0.08],
 ];
+// Mundos extras (portais do ginásio). Nível mais alto que a Rota: veja WORLDS em map.js.
+const ICE_TABLE = [
+  [238, 14], [215, 10], [86, 8], [90, 8], [41, 6], [39, 5], [35, 5], [66, 5], [63, 4], [27, 4],
+  [124, 4], [87, 3], [91, 2.5], [42, 3], [67, 2], [64, 2],
+  [131, 1.2], [133, 0.8], [147, 0.6],
+  [144, 0.2], [378, 0.1], [245, 0.1], // lendários do Gelo: sempre no nível máximo do mundo (200)
+];
+const ICE_WATER_TABLE = [[86, 14], [90, 12], [87, 6], [91, 4], [60, 5], [131, 1.5]];
+const LAVA_TABLE = [
+  [4, 12], [37, 10], [74, 10], [240, 8], [228, 8], [50, 8], [95, 6], [111, 5], [104, 5],
+  [58, 5], [77, 5], [5, 4], [75, 4], [51, 3.5], [246, 3], [126, 3], [229, 2.5],
+  [59, 0.9], [78, 0.9], [136, 0.6], [6, 0.5], [248, 0.4],
+  [146, 0.15], [244, 0.1], [250, 0.05], [383, 0.1], [377, 0.1], // lendários do Vulcão: sempre no nível máximo do mundo (500)
+];
+const WORLD_TABLES = { ice: { land: ICE_TABLE, water: ICE_WATER_TABLE }, lava: { land: LAVA_TABLE, water: [] } };
 // Lendários que aparecem como boss a cada 3 h: [species_id, peso]
 const BOSS_TABLE = [
   [144, 3], [145, 3], [146, 3], [243, 3], [244, 3], [245, 3],
@@ -215,7 +230,7 @@ function calcStats(id, level) {
 }
 
 // EXP necessário para ir de `level` para `level + 1` (cresce de forma suave até o nível 100)
-const MAX_LEVEL = 100;
+const MAX_LEVEL = 1000; // nível máximo de qualquer Pokémon (a Rota vai até 60; o Gelo até 200; o Vulcão até 500)
 const expToNext = (level) => Math.floor(0.9 * level * level + 12 * level + 20);
 
 // Nível mínimo em que uma espécie pode existir na natureza: uma forma evoluída nunca é mais fraca do que o
@@ -232,5 +247,5 @@ function evolveTarget(id, level) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { SPECIES, RARITY, TYPES, CHART, MOVE_NAMES, EVOLUTIONS, WILD_TABLE, WATER_TABLE, BOSS_TABLE, MAX_LEVEL, expToNext, minLevel, calcStats, evolveTarget, effectiveness };
+  module.exports = { SPECIES, RARITY, TYPES, CHART, MOVE_NAMES, EVOLUTIONS, WILD_TABLE, WATER_TABLE, WORLD_TABLES, BOSS_TABLE, MAX_LEVEL, expToNext, minLevel, calcStats, evolveTarget, effectiveness };
 }

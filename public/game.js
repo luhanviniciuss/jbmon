@@ -2,6 +2,7 @@ const $ = (id) => document.getElementById(id);
 let token = null;
 let mode = 'login';
 let inBattle = false;
+let WORLD_ID = 'route'; // mundo atual: route | town | ice | lava
 let MY_ID = null;
 let IS_ADMIN = false; // vem do servidor no login; o servidor confere de novo a cada ação do painel
 let MY_CLAN = null; // { id, tag, name, role }
@@ -250,7 +251,7 @@ setInterval(() => {
   chip.classList.toggle('live', !!BOSS);
   chip.textContent = BOSS ? '⚔ ' + SPECIES[BOSS.species_id].name + ' · ' + fmtTime(BOSS.until - Date.now()) : '⏳ Próximo lendário: ' + fmtTime(BOSS_NEXT - Date.now());
 }, 500);
-$('bossChip').addEventListener('click', () => { if (BOSS) window.worldScene?.walkToWorld(BOSS.x, BOSS.y); });
+$('bossChip').addEventListener('click', () => { if (BOSS && WORLD_ID === 'route') window.worldScene?.walkToWorld(BOSS.x, BOSS.y); });
 $('closeBag').addEventListener('click', () => openBag(false));
 $('closeParty').addEventListener('click', () => openParty(false));
 window.addEventListener('keydown', (e) => {
@@ -263,8 +264,15 @@ window.addEventListener('keydown', (e) => {
 });
 
 // ---------- Minimapa ----------
-const TILE_COLORS = ['#4caf50', '#e6d38a', '#2f6fd6', '#1b5e20', '#2e8b3d'];
-function buildMinimap(mapData) {
+const MINI_COLORS = {
+  route: ['#4caf50', '#e6d38a', '#2f6fd6', '#1b5e20', '#2e8b3d'],
+  ice: ['#eaf4ff', '#bfe6ff', '#5fa8e0', '#8fd0f0', '#cfe0f0'],
+  lava: ['#2b2225', '#4a3f42', '#ff5a1f', '#6b5a5e', '#7a3a24'],
+  town: ['#b9bcc8', '#d6d0c0', '#4da3ff', '#2f6b3a', '#b9bcc8'],
+};
+const WORLD_BG = { route: '#0b1020', town: '#2f6b3a', ice: '#eaf4ff', lava: '#150a0a' };
+function buildMinimap(mapData, world = 'route') {
+  const TILE_COLORS = MINI_COLORS[world] || MINI_COLORS.route;
   const off = document.createElement('canvas');
   off.width = MAP_W; off.height = MAP_H;
   const c = off.getContext('2d');
@@ -385,18 +393,10 @@ class WorldScene extends Phaser.Scene {
 
   create() {
     this.makeTextures();
-    this.mapData = generateMap();
-    this.mini = buildMinimap(this.mapData);
     this.miniCtx = $('minimap').getContext('2d');
-
-    const map = this.make.tilemap({ data: this.mapData, tileWidth: TILE, tileHeight: TILE });
-    const tileset = map.addTilesetImage('tiles', 'tiles', TILE, TILE, 0, 0);
-    this.layer = map.createLayer(0, tileset, 0, 0);
-    this.layer.setCollision([2, 3]);
+    this.mapObjs = [];
     this.physics.world.setBounds(0, 0, MAP_W * TILE, MAP_H * TILE);
-    const cw = (CLEAR_MAX - CLEAR_MIN + 1) * TILE;
-    this.add.rectangle(CLEAR_MIN * TILE + cw / 2, CLEAR_MIN * TILE + cw / 2, cw, cw, 0xffffff, 0.14).setStrokeStyle(3, 0xffffff, 0.55).setDepth(1);
-    this.drawCenter();
+    this.loadWorld('route');
 
     this.keys = this.input.keyboard.addKeys('W,A,S,D,UP,LEFT,DOWN,RIGHT');
     this.path = null;
@@ -417,6 +417,7 @@ class WorldScene extends Phaser.Scene {
     this.socket.on('online', (n) => { $('online').textContent = n; });
     this.socket.on('players:init', ({ self, others, balls }) => {
       MY_ID = self.id;
+      if (self.world && self.world !== this.worldId) this.loadWorld(self.world);
       MY_CLAN = self.clan || null;
       setClanLabel();
       setBalls(balls);
@@ -425,15 +426,15 @@ class WorldScene extends Phaser.Scene {
       if (this.player) this.player.setPosition(self.x, self.y); else this.spawnSelf(self);
       others.forEach((p) => this.addOther(p));
     });
-    this.socket.on('player:joined', (p) => { this.addOther(p); toast(`${p.username} entrou no mundo`); });
+    this.socket.on('player:joined', (p, quiet) => { this.addOther(p); if (!quiet) toast(`${p.username} entrou no mundo`); });
     this.socket.on('player:moved', (p) => {
       const o = this.others.get(p.id);
       if (o) { o.dir = p.dir || o.dir; o.moveUntil = this.time.now + 220; this.tweens.add({ targets: o.sprite, x: p.x, y: p.y, duration: 60 }); }
     });
-    this.socket.on('player:left', (id) => {
+    this.socket.on('player:left', (id, quiet) => {
       const o = this.others.get(id);
       if (!o) return;
-      toast(`${o.name} saiu`);
+      if (!quiet) toast(`${o.name} saiu`);
       o.sprite.destroy(); o.label.destroy(); o.shadow.destroy(); o.tag.destroy();
       this.others.delete(id);
     });
@@ -449,23 +450,25 @@ class WorldScene extends Phaser.Scene {
       const o = this.others.get(id);
       if (o) { o.clan = clan; o.label.setText(tagged(o.name, clan)); }
     });
-    // ===== Laboratório: o servidor autoriza a entrada/saída; aqui só trocamos de cena =====
-    this.socket.on('lab:entered', () => {
+    // ===== Interiores (laboratório e ginásio) e troca de mundo: o servidor autoriza; aqui só trocamos de cena =====
+    const openInterior = (name) => {
       this.labPending = false;
       this.inLab = true;
+      this.interior = name;
       this.path = null;
       this.player?.setVelocity(0, 0);
       this.input.enabled = false;
       openParty(false); openBag(false); openGroup(false); Arena.open(false); $('settings').classList.remove('open');
       document.body.classList.add('in-lab');
       this.cameras.main.fadeOut(220, 0, 0, 0);
-      this.cameras.main.once('camerafadeoutcomplete', () => { this.cameras.main.setVisible(false); this.scene.launch('Lab'); });
-    });
-    this.socket.on('lab:exited', () => {
-      const lab = this.scene.get('Lab');
-      lab?.cameras?.main?.fadeOut(220, 0, 0, 0);
-      this.time.delayedCall(240, () => {
-        this.scene.stop('Lab');
+      this.cameras.main.once('camerafadeoutcomplete', () => { this.cameras.main.setVisible(false); this.scene.launch(name); });
+    };
+    this.closeInterior = (fade = true) => {
+      const name = this.interior;
+      if (!name) return;
+      const done = () => {
+        this.scene.stop(name);
+        this.interior = null;
         this.inLab = false;
         this.input.enabled = true;
         this.cameras.main.setVisible(true);
@@ -473,7 +476,32 @@ class WorldScene extends Phaser.Scene {
         this.cameras.main.fadeIn(300, 0, 0, 0);
         document.body.classList.remove('in-lab');
         this.lastTarget = '';
-      });
+      };
+      if (fade) { this.scene.get(name)?.cameras?.main?.fadeOut(220, 0, 0, 0); this.time.delayedCall(240, done); } else done();
+    };
+    this.socket.on('lab:entered', () => openInterior('Lab'));
+    this.socket.on('gym:entered', () => openInterior('Gym'));
+    this.socket.on('lab:exited', () => this.closeInterior());
+    this.socket.on('gym:exited', () => this.closeInterior());
+    this.socket.on('world:enter', ({ world, x, y, others, wilds }) => {
+      this.closeInterior(false);
+      this.others.forEach((o) => { o.sprite.destroy(); o.label.destroy(); o.shadow.destroy(); o.tag.destroy(); });
+      this.others.clear();
+      this.wilds.forEach((w) => this.destroyWild(w));
+      this.wilds.clear();
+      this.loadWorld(world);
+      this.player.setPosition(x, y);
+      this.player.setVelocity(0, 0);
+      this.path = null;
+      this.labPending = false;
+      this.lastTarget = '';
+      others.forEach((p) => this.addOther(p));
+      wilds.forEach((w) => this.addWild(w));
+      this.setBoss(this.lastBoss || null);
+      this.cameras.main.resetFX();
+      this.cameras.main.fadeIn(500, 255, 255, 255);
+      const d = WORLDS[world];
+      toast(d.icon + ' ' + d.name, true);
     });
     this.socket.on('player:hide', ({ id, hidden }) => this.setHidden(id, hidden));
     this.socket.on('player:combat', ({ id, combat }) => this.setCombat(id, combat));
@@ -522,10 +550,46 @@ class WorldScene extends Phaser.Scene {
     this.socket.on('player:correct', ({ x, y }) => { if (this.player) { this.player.setPosition(x, y); this.player.setVelocity(0, 0); } });
   }
 
-  // ===== Prédio do Centro Pokémon (mapa externo). Os tiles são sólidos (map.js); a porta é o tile LAB.doorX/doorY. =====
-  drawCenter() {
-    const bx = LAB.x0 * TILE, by = LAB.y0 * TILE, bw = (LAB.x1 - LAB.x0 + 1) * TILE, bh = (LAB.y1 - LAB.y0 + 1) * TILE;
-    const g = this.add.graphics().setDepth(3);
+  // ===== Mundos: cada um tem seu mapa, tiles, decoração e clima. O servidor diz em qual mundo o jogador está. =====
+  reg(o) { this.mapObjs.push(o); return o; }
+  txt(x, y, t, size, color, bg, depth = 4) {
+    return this.reg(this.add.text(x, y, t, { fontFamily: 'Segoe UI, sans-serif', fontSize: size, fontStyle: 'bold', color, backgroundColor: bg, padding: { x: 7, y: 2 } }).setOrigin(0.5).setDepth(depth));
+  }
+
+  loadWorld(id) {
+    const def = WORLDS[id] || WORLDS.route;
+    WORLD_ID = def.id;
+    this.worldId = def.id;
+    (this.mapObjs || []).forEach((o) => { this.tweens.killTweensOf(o); o.destroy(); });
+    this.mapObjs = [];
+    this.tilemap?.destroy();
+    this.playerCollider?.destroy();
+    this.mapData = generateMap(def.id);
+    this.mini = buildMinimap(this.mapData, def.id);
+    const key = 'tiles_' + def.id;
+    this.tilemap = this.make.tilemap({ data: this.mapData, tileWidth: TILE, tileHeight: TILE });
+    const tileset = this.tilemap.addTilesetImage(key, key, TILE, TILE, 0, 0);
+    this.layer = this.tilemap.createLayer(0, tileset, 0, 0);
+    this.layer.setCollision([2, 3]);
+    if (this.player) this.playerCollider = this.physics.add.collider(this.player, this.layer);
+    this.cameras.main.setBackgroundColor(WORLD_BG[def.id]);
+    if (def.id === 'route') {
+      const cw = (CLEAR_MAX - CLEAR_MIN + 1) * TILE;
+      this.reg(this.add.rectangle(CLEAR_MIN * TILE + cw / 2, CLEAR_MIN * TILE + cw / 2, cw, cw, 0xffffff, 0.14).setStrokeStyle(3, 0xffffff, 0.55).setDepth(1));
+      this.drawCenter(LAB);
+      this.drawGym();
+    } else {
+      this.drawPortal();
+      if (def.id === 'town') this.drawTown();
+      else this.weather(def.id);
+    }
+    $('worldChip').textContent = def.icon + ' ' + def.name;
+  }
+
+  // Prédio do Centro Pokémon. Os tiles são sólidos (map.js); a porta é o tile b.doorX/doorY.
+  drawCenter(b) {
+    const bx = b.x0 * TILE, by = b.y0 * TILE, bw = (b.x1 - b.x0 + 1) * TILE, bh = (b.y1 - b.y0 + 1) * TILE;
+    const g = this.reg(this.add.graphics().setDepth(3));
     g.fillStyle(0x000000, 0.28).fillEllipse(bx + bw / 2, by + bh + 4, bw + 24, 18);
     g.fillStyle(0xf4f6ff).fillRect(bx, by + 20, bw, bh - 20);                   // paredes
     g.fillStyle(0xd7dcf0).fillRect(bx, by + bh - 14, bw, 14);                   // rodapé
@@ -537,19 +601,139 @@ class WorldScene extends Phaser.Scene {
       g.fillStyle(0x8fd3ff).fillRect(wx, by + 36, 30, 24);
       g.fillStyle(0xffffff, 0.45).fillRect(wx + 3, by + 39, 6, 16);
     });
-    const dx = LAB.doorX * TILE, dy = LAB.doorY * TILE;                            // porta (tile andável)
+    const dx = b.doorX * TILE, dy = b.doorY * TILE;                                // porta (tile andável)
     g.fillStyle(0x33415f).fillRect(dx - 3, dy - 6, TILE + 6, TILE + 6);
     g.fillStyle(0x9fe8ff, 0.95).fillRect(dx, dy - 3, TILE / 2 - 1, TILE + 3).fillRect(dx + TILE / 2 + 1, dy - 3, TILE / 2 - 1, TILE + 3);
     g.fillStyle(0xffffff, 0.5).fillRect(dx + 3, dy, 4, 20).fillRect(dx + TILE / 2 + 4, dy, 4, 20);
     g.fillStyle(0x2ecc71, 0.9).fillRect(dx - 3, dy + TILE - 2, TILE + 6, 4);      // tapete de entrada
     g.fillStyle(0xffffff).fillCircle(bx + bw / 2, by + 11, 9);                     // cruz no telhado
     g.fillStyle(0xe53950).fillRect(bx + bw / 2 - 2, by + 5, 4, 12).fillRect(bx + bw / 2 - 6, by + 9, 12, 4);
-    this.add.text(bx + bw / 2, by - 16, 'CENTRO POKÉMON', { fontFamily: 'Segoe UI, sans-serif', fontSize: '13px', fontStyle: 'bold', color: '#fff', backgroundColor: '#e53950cc', padding: { x: 8, y: 3 } }).setOrigin(0.5).setDepth(4);
-    this.add.text(dx + TILE / 2, dy + TILE + 12, '↑ Laboratório de cura', { fontFamily: 'Segoe UI, sans-serif', fontSize: '10px', fontStyle: 'bold', color: '#fff', backgroundColor: '#0b1020aa', padding: { x: 5, y: 2 } }).setOrigin(0.5).setDepth(4);
+    this.txt(bx + bw / 2, by - 16, 'CENTRO POKÉMON', '13px', '#fff', '#e53950cc');
+    this.txt(dx + TILE / 2, dy + TILE + 12, '↑ Laboratório de cura', '10px', '#fff', '#0b1020aa');
+  }
+
+  // Ginásio (Rota): pedra, telhado azul e dourado, bandeiras e a porta brilhando como um portal
+  drawGym() {
+    const b = GYM, bx = b.x0 * TILE, by = b.y0 * TILE, bw = (b.x1 - b.x0 + 1) * TILE, bh = (b.y1 - b.y0 + 1) * TILE;
+    const g = this.reg(this.add.graphics().setDepth(3));
+    g.fillStyle(0x000000, 0.28).fillEllipse(bx + bw / 2, by + bh + 4, bw + 24, 18);
+    g.fillStyle(0xc9cfdc).fillRect(bx, by + 20, bw, bh - 20);                   // pedra
+    for (let y = by + 24; y < by + bh - 12; y += 14) for (let x = bx + ((y / 14) % 2 ? 0 : 10); x < bx + bw; x += 20) g.fillStyle(0xb3bacb).fillRect(x, y, 18, 1).fillRect(x + 18, y, 1, 14);
+    g.fillStyle(0x8d95ac).fillRect(bx, by + bh - 14, bw, 14);                   // base
+    g.fillStyle(0x2c3f7a).fillRoundedRect(bx - 10, by - 6, bw + 20, 30, 6);     // telhado azul
+    g.fillStyle(0xd8b04a).fillRect(bx - 10, by + 20, bw + 20, 4).fillRect(bx - 6, by - 2, bw + 12, 3); // frisos dourados
+    g.fillStyle(0xd8b04a).fillCircle(bx + bw / 2, by + 10, 10);                // emblema (raio)
+    g.fillStyle(0x2c3f7a).fillTriangle(bx + bw / 2 + 3, by + 2, bx + bw / 2 - 5, by + 11, bx + bw / 2, by + 11).fillTriangle(bx + bw / 2 - 3, by + 19, bx + bw / 2 + 5, by + 9, bx + bw / 2, by + 9);
+    [bx + 16, bx + bw - 16 - 22].forEach((fx) => {                                // bandeiras
+      g.fillStyle(0x8f1f34).fillRect(fx, by + 30, 22, 44);
+      g.fillStyle(0xd8b04a).fillRect(fx, by + 30, 22, 3).fillTriangle(fx, by + 74, fx + 22, by + 74, fx + 11, by + 84);
+      g.fillStyle(0xd8b04a).fillCircle(fx + 11, by + 50, 5);
+    });
+    const dx = b.doorX * TILE, dy = b.doorY * TILE;
+    g.fillStyle(0x1c2236).fillRect(dx - 4, dy - 8, TILE + 8, TILE + 8);           // porta com moldura dourada
+    g.lineStyle(3, 0xd8b04a).strokeRect(dx - 4, dy - 8, TILE + 8, TILE + 8);
+    const glow = this.reg(this.add.circle(dx + TILE / 2, dy + 8, 16, 0x9a6bff, 0.6).setDepth(3));
+    this.tweens.add({ targets: glow, scale: 1.5, alpha: 0.15, yoyo: true, repeat: -1, duration: 900 });
+    g.fillStyle(0x6a4bd6, 0.9).fillRect(dx, dy - 4, TILE, TILE + 2);
+    this.txt(bx + bw / 2, by - 22, 'GINÁSIO', '13px', '#ffe9a8', '#2c3f7acc');
+    this.txt(dx + TILE / 2, dy + TILE + 12, '↑ Portais', '10px', '#fff', '#0b1020aa');
+  }
+
+  // Cidade: casas coloridas sobre os blocos sólidos, o Centro Pokémon e a fonte da praça
+  drawTown() {
+    const roofs = [0xe53950, 0x3d8bff, 0xffb02e, 0x3ddc97, 0xb07cff, 0xff7ab8];
+    TOWN_HOUSES.forEach((h, i) => {
+      const x = h.x * TILE, y = h.y * TILE, w = h.w * TILE, hh = h.h * TILE, roof = roofs[i % roofs.length];
+      const g = this.reg(this.add.graphics().setDepth(3));
+      g.fillStyle(0x000000, 0.25).fillEllipse(x + w / 2, y + hh + 2, w + 14, 14);
+      g.fillStyle(0xf2e8d5).fillRect(x, y + 22, w, hh - 22);
+      g.fillStyle(0xd9ccb0).fillRect(x, y + hh - 12, w, 12);
+      g.fillStyle(roof).fillRoundedRect(x - 6, y - 2, w + 12, 30, 6);
+      g.fillStyle(0xffffff, 0.25).fillRect(x - 2, y + 1, w + 4, 5);
+      for (let wx = x + 14; wx < x + w - 30; wx += 52) { g.fillStyle(0x33415f).fillRect(wx - 2, y + 36, 30, 26); g.fillStyle(0x8fd3ff).fillRect(wx, y + 38, 26, 22); g.fillStyle(0xffffff, 0.4).fillRect(wx + 3, y + 40, 6, 14); }
+      const dxp = x + w / 2 - 12;
+      g.fillStyle(0x6b4a2b).fillRect(dxp, y + hh - 34, 24, 34).fillStyle(0xffd54a).fillCircle(dxp + 19, y + hh - 16, 2);
+    });
+    this.drawCenter(TOWN_LAB);
+    const fg = this.reg(this.add.graphics().setDepth(3));                           // borda de pedra da fonte
+    fg.lineStyle(5, 0x8f96a8).strokeRoundedRect(48 * TILE - 3, 53 * TILE - 3, 5 * TILE + 6, 2 * TILE + 6, 8);
+    const spray = this.reg(this.add.circle(50.5 * TILE, 53.7 * TILE, 8, 0xdff3ff, 0.8).setDepth(4));
+    this.tweens.add({ targets: spray, scale: 1.8, alpha: 0.2, yoyo: true, repeat: -1, duration: 700 });
+    this.txt(50.5 * TILE, 52 * TILE - 6, 'Praça da Cidade', '11px', '#fff', '#0b1020aa');
+  }
+
+  // Portal de volta ao ginásio (mundos extras)
+  drawPortal() {
+    const cx = (PORTAL.tx + 0.5) * TILE, cy = (PORTAL.ty + 0.5) * TILE;
+    const glow = this.reg(this.add.circle(cx, cy, 34, 0x9a6bff, 0.25).setDepth(2));
+    this.tweens.add({ targets: glow, scale: 1.4, alpha: 0.08, yoyo: true, repeat: -1, duration: 1000 });
+    const g = this.reg(this.add.graphics().setDepth(2));
+    g.fillStyle(0x0b1020, 0.85).fillCircle(cx, cy, 20).lineStyle(4, 0x9a6bff).strokeCircle(cx, cy, 22).lineStyle(2, 0xffffff, 0.7).strokeCircle(cx, cy, 26);
+    const spin = this.reg(this.add.container(cx, cy).setDepth(3));
+    const sg = this.add.graphics();
+    for (let i = 0; i < 3; i++) sg.lineStyle(3, 0xc9b0ff, 0.9 - i * 0.2).beginPath().arc(0, 0, 16 - i * 4.5, i, i + 3.2).strokePath();
+    spin.add(sg);
+    this.tweens.add({ targets: spin, angle: 360, duration: 2600, repeat: -1 });
+    this.txt(cx, cy - 40, 'Portal do Ginásio', '11px', '#fff', '#3b2a80cc');
+  }
+
+  // Clima: neve caindo no gelo; brasas subindo e calor pulsando no vulcão
+  weather(id) {
+    const w = 2600;
+    if (id === 'ice') {
+      const em = this.add.particles(0, 0, 'flake', { x: { min: 0, max: w }, y: -12, lifespan: 6500, speedY: { min: 40, max: 95 }, speedX: { min: -25, max: 15 }, scale: { min: 0.5, max: 1.5 }, alpha: { min: 0.55, max: 1 }, frequency: 45, quantity: 1 });
+      em.setScrollFactor(0).setDepth(30);
+      this.reg(em);
+      this.reg(this.add.rectangle(0, 0, 6000, 6000, 0xbfe6ff, 0.08).setOrigin(0).setScrollFactor(0).setDepth(29)); // frio azulado
+    } else if (id === 'lava') {
+      const em = this.add.particles(0, 0, 'ember', { x: { min: 0, max: w }, y: this.scale.height + 12, lifespan: 4200, speedY: { min: -110, max: -45 }, speedX: { min: -18, max: 18 }, scale: { start: 1.1, end: 0 }, alpha: { start: 0.95, end: 0 }, tint: [0xff7a28, 0xffb02e, 0xff4a1f], blendMode: 'ADD', frequency: 70, quantity: 1 });
+      em.setScrollFactor(0).setDepth(30);
+      this.reg(em);
+      const heat = this.reg(this.add.rectangle(0, 0, 6000, 6000, 0xff4a1f, 0.07).setOrigin(0).setScrollFactor(0).setDepth(29)); // calor
+      this.tweens.add({ targets: heat, alpha: 0.16, yoyo: true, repeat: -1, duration: 1500, ease: 'Sine.easeInOut' });
+    }
+  }
+
+  // Tiles e partículas dos mundos extras (o mapa usa os mesmos índices 0-4 em todos)
+  makeWorldTiles() {
+    const mk = (key, painters) => {
+      const tex = this.textures.createCanvas(key, TILE * 5, TILE);
+      const c = tex.getContext();
+      painters.forEach((p, i) => p(c, i * TILE));
+      tex.refresh();
+    };
+    const fill = (c, ox, col) => { c.fillStyle = col; c.fillRect(ox, 0, TILE, TILE); };
+    const specks = (c, ox, cols, n, size = 2) => { for (let k = 0; k < n; k++) { c.fillStyle = cols[k % cols.length]; c.fillRect(ox + ((k * 13 + 5) % 28), (k * 7 + 3) % 28, size, size); } };
+    const line = (c, x0, y0, x1, y1, col, w = 2) => { c.strokeStyle = col; c.lineWidth = w; c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke(); };
+    mk('tiles_ice', [
+      (c, o) => { fill(c, o, '#eaf4ff'); specks(c, o, ['#d3e6f7', '#ffffff'], 10); },
+      (c, o) => { fill(c, o, '#bfe6ff'); line(c, o + 4, 26, o + 14, 8, 'rgba(255,255,255,.75)'); line(c, o + 16, 28, o + 27, 12, 'rgba(255,255,255,.6)'); },
+      (c, o) => { fill(c, o, '#5fa8e0'); specks(c, o, ['#8fd0f5'], 6, 3); line(c, o + 3, 10, o + 14, 16, 'rgba(255,255,255,.7)', 1); line(c, o + 14, 16, o + 22, 26, 'rgba(255,255,255,.7)', 1); },
+      (c, o) => { fill(c, o, '#eaf4ff'); c.fillStyle = '#5fa8e0'; c.fillRect(o + 4, 9, 24, 21); c.fillStyle = '#8fd3ff'; c.fillRect(o + 4, 6, 24, 20); c.fillStyle = '#d6f2ff'; c.beginPath(); c.moveTo(o + 4, 6); c.lineTo(o + 14, 1); c.lineTo(o + 28, 6); c.lineTo(o + 18, 10); c.closePath(); c.fill(); c.fillStyle = 'rgba(255,255,255,.55)'; c.fillRect(o + 8, 12, 4, 12); },
+      (c, o) => { fill(c, o, '#dbe8f5'); c.fillStyle = '#ffffff'; for (const [px, py] of [[8, 22], [20, 14], [26, 26], [12, 8]]) { c.beginPath(); c.arc(o + px, py, 6, Math.PI, 0); c.fill(); } specks(c, o, ['#c3d6ea'], 6); },
+    ]);
+    mk('tiles_lava', [
+      (c, o) => { fill(c, o, '#2b2225'); specks(c, o, ['#3a2f33', '#1e171a'], 12); },
+      (c, o) => { fill(c, o, '#4a3f42'); specks(c, o, ['#5d5054', '#39302f'], 12); },
+      (c, o) => { fill(c, o, '#ff5a1f'); line(c, o + 2, 8, o + 12, 12, '#ffb02e', 3); line(c, o + 12, 12, o + 22, 8, '#ffb02e', 3); line(c, o + 6, 24, o + 18, 20, '#ffe08a', 2); line(c, o + 18, 20, o + 30, 24, '#ffb02e', 3); specks(c, o, ['#8a2410'], 4, 3); },
+      (c, o) => { fill(c, o, '#2b2225'); c.fillStyle = '#4b3c40'; c.beginPath(); c.arc(o + 16, 18, 13, 0, Math.PI * 2); c.fill(); c.fillStyle = '#6b5a5e'; c.beginPath(); c.arc(o + 13, 14, 7, 0, Math.PI * 2); c.fill(); c.fillStyle = '#211a1c'; c.fillRect(o + 8, 27, 18, 3); },
+      (c, o) => { fill(c, o, '#2b2225'); line(c, o + 3, 8, o + 14, 16, '#ff7a28'); line(c, o + 14, 16, o + 10, 27, '#ff7a28'); line(c, o + 14, 16, o + 27, 12, '#ff7a28'); specks(c, o, ['#ffc857'], 5, 2); },
+    ]);
+    mk('tiles_town', [
+      (c, o) => { fill(c, o, '#b9bcc8'); for (let y = 0; y < TILE; y += 16) { line(c, o, y, o + TILE, y, '#9da1b4', 1); const off = (y / 16) % 2 ? 8 : 0; line(c, o + off, y, o + off, y + 16, '#9da1b4', 1); line(c, o + off + 16, y, o + off + 16, y + 16, '#9da1b4', 1); } },
+      (c, o) => { fill(c, o, '#d8d2c2'); c.fillStyle = '#cfc8b6'; c.fillRect(o, 0, 16, 16); c.fillRect(o + 16, 16, 16, 16); },
+      (c, o) => { fill(c, o, '#4da3ff'); line(c, o + 4, 10, o + 14, 10, '#8fcfff', 2); line(c, o + 16, 22, o + 28, 22, '#8fcfff', 2); },
+      (c, o) => { fill(c, o, '#2f6b3a'); for (const [px, py, r, col] of [[8, 9, 8, '#3d8a49'], [22, 12, 9, '#26552e'], [12, 24, 8, '#3d8a49'], [26, 26, 7, '#26552e']]) { c.fillStyle = col; c.beginPath(); c.arc(o + px, py, r, 0, Math.PI * 2); c.fill(); } },
+      (c, o) => { fill(c, o, '#b9bcc8'); },
+    ]);
+    const f = this.make.graphics({ x: 0, y: 0, add: false });
+    f.fillStyle(0xffffff).fillCircle(4, 4, 4); f.generateTexture('flake', 8, 8);
+    const e = this.make.graphics({ x: 0, y: 0, add: false });
+    e.fillStyle(0xffffff, 0.35).fillCircle(6, 6, 6).fillStyle(0xffffff, 0.9).fillCircle(6, 6, 3); e.generateTexture('ember', 12, 12);
   }
 
   makeTextures() {
-    const tex = this.textures.createCanvas('tiles', TILE * 5, TILE);
+    const tex = this.textures.createCanvas('tiles_route', TILE * 5, TILE);
     const c = tex.getContext();
     const grass = (i) => { c.fillStyle = '#4caf50'; c.fillRect(i * TILE, 0, TILE, TILE); c.fillStyle = '#57bb5b'; for (let k = 0; k < 6; k++) c.fillRect(i * TILE + ((k * 11) % 28), (k * 7) % 28, 3, 3); };
     grass(0);
@@ -564,6 +748,7 @@ class WorldScene extends Phaser.Scene {
     c.strokeStyle = '#1f6e2c'; c.lineWidth = 2;
     for (const [px, py] of [[5, 12], [16, 8], [26, 14], [10, 24], [22, 27]]) { c.beginPath(); c.moveTo(4 * TILE + px - 3, py + 6); c.lineTo(4 * TILE + px, py - 4); c.lineTo(4 * TILE + px + 3, py + 6); c.stroke(); }
     tex.refresh();
+    this.makeWorldTiles();
 
     // Personagem 32x32 com boné, cabelo, rosto, jaqueta, braços, calça e tênis. Anda com passos alternados e balanço dos braços.
     const drawAvatar = (key, jacket, cap) => {
@@ -665,7 +850,7 @@ class WorldScene extends Phaser.Scene {
     this.pDir = 'down';
     this.player.body.setSize(18, 18).setOffset(7, 12);
     this.player.setCollideWorldBounds(true);
-    this.physics.add.collider(this.player, this.layer);
+    this.playerCollider = this.physics.add.collider(this.player, this.layer);
     this.myLabel = this.label(tagged(username, MY_CLAN));
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
     this.cameras.main.setBounds(0, 0, MAP_W * TILE, MAP_H * TILE);
@@ -789,7 +974,8 @@ class WorldScene extends Phaser.Scene {
   setBoss(b) {
     if (this.bossObj) { const o = this.bossObj; this.tweens.killTweensOf(o.aura); this.tweens.killTweensOf(o.img); Object.values(o).forEach((x) => x.destroy()); this.bossObj = null; }
     BOSS = b ? { species_id: b.species_id, x: b.x, y: b.y, until: Date.now() + b.left } : null;
-    if (!b) return;
+    this.lastBoss = b;
+    if (!b || WORLD_ID !== 'route') return; // o boss só existe na Rota
     const aura = this.add.circle(b.x, b.y + 6, 54, 0xf0b400, 0.25).setDepth(6);
     this.tweens.add({ targets: aura, scale: 1.4, alpha: 0.05, yoyo: true, repeat: -1, duration: 900 });
     const shadow = this.add.image(b.x, b.y + 34, 'shadow').setDepth(6).setScale(2.4);
@@ -833,7 +1019,7 @@ class WorldScene extends Phaser.Scene {
     const S = 150, k = S / MAP_W, c = this.miniCtx;
     c.drawImage(this.mini, 0, 0, S, S);
     const dot = (px, py, col, r) => { c.fillStyle = col; c.beginPath(); c.arc((px / TILE) * k, (py / TILE) * k, r, 0, Math.PI * 2); c.fill(); };
-    if (BOSS) { c.lineWidth = 1.5; c.strokeStyle = '#fff'; dot(BOSS.x, BOSS.y, '#f0b400', 4.2); c.stroke(); }
+    if (BOSS && WORLD_ID === 'route') { c.lineWidth = 1.5; c.strokeStyle = '#fff'; dot(BOSS.x, BOSS.y, '#f0b400', 4.2); c.stroke(); }
     this.wilds.forEach((w) => dot(w.img.x, w.img.y, w.water ? '#5ec8ff' : '#ffb02e', 1.8));
     const mates = new Set((GROUP?.members || []).map((m) => m.id));
     this.others.forEach((o, id) => { if (!o.hidden && !mates.has(id)) dot(o.sprite.x, o.sprite.y, o.combat ? '#ff4d5e' : '#4da3ff', 2.5); });
@@ -881,11 +1067,15 @@ class WorldScene extends Phaser.Scene {
     $('coords').textContent = `${Math.floor(p.x / TILE)}, ${Math.floor(p.y / TILE)}`;
     this.drawMinimap();
 
-    // Porta do Centro Pokémon: pisar no tile da porta pede a entrada no laboratório
-    if (!inBattle && !this.inLab && !this.labPending && Math.floor(p.x / TILE) === LAB.doorX && Math.floor(p.y / TILE) === LAB.doorY) {
-      this.labPending = true;
-      this.socket.emit('lab:enter');
-      this.time.delayedCall(2500, () => { this.labPending = false; });
+    // Portas: pisar no tile da porta pede a entrada (laboratório do Centro Pokémon, ou ginásio na Rota). O servidor confere.
+    if (!inBattle && !this.inLab && !this.labPending) {
+      const ptx = Math.floor(p.x / TILE), pty = Math.floor(p.y / TILE), lb = LABS[WORLD_ID];
+      const ev = lb && ptx === lb.doorX && pty === lb.doorY ? 'lab:enter' : WORLD_ID === 'route' && ptx === GYM.doorX && pty === GYM.doorY ? 'gym:enter' : null;
+      if (ev) {
+        this.labPending = true;
+        this.socket.emit(ev);
+        this.time.delayedCall(2500, () => { this.labPending = false; });
+      }
     }
     const moving = Math.hypot(vx, vy) > 0.05;
     if (!inBattle && !this.inLab && (moving || this.moving) && time - this.lastSent > 40) {
@@ -914,6 +1104,6 @@ function startGame() {
     physics: { default: 'arcade' },
     loader: { crossOrigin: 'anonymous' },
     scale: { mode: Phaser.Scale.RESIZE },
-    scene: [WorldScene, LabScene],
+    scene: [WorldScene, LabScene, GymScene],
   });
 }

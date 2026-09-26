@@ -158,13 +158,14 @@ module.exports = function createRaidSystem(ctx) {
   async function tryStart(uid) {
     const me = meByUser.get(uid);
     if (!boss || boss.busy || starting || !me || raids.has(uid) || isBusy(uid)) return;
+    if (me.world && me.world !== 'route') return; // o boss só existe na Rota
     if (Math.hypot(me.x - boss.x, me.y - boss.y) > TOUCH_R) return;
     const hint = (msg) => { if (Date.now() - (lastHint.get(uid) || 0) > 4000) { lastHint.set(uid, Date.now()); notice(uid, msg); } };
     const g = groups.get(groupOf.get(uid));
     if (!g || g.members.length < 2) return hint('Forme um grupo de 2 a 4 jogadores (tecla G) para enfrentar o lendário.');
     const near = g.members.filter((id) => {
       const p = meByUser.get(id);
-      return p && Math.hypot(p.x - boss.x, p.y - boss.y) < NEAR_R && !isBusy(id) && !raids.has(id);
+      return p && (!p.world || p.world === 'route') && Math.hypot(p.x - boss.x, p.y - boss.y) < NEAR_R && !isBusy(id) && !raids.has(id);
     });
     if (near.length < 2) return hint('Reúna pelo menos 2 membros do grupo perto do boss.');
 

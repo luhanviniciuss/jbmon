@@ -68,7 +68,7 @@ const Admin = (() => {
   }
   function spawnHtml() {
     return '<div class="section-title">Spawnar Pokémon selvagem</div>' + picker('sp') +
-      '<div class="arow2"><label class="al">Nível<input id="spLv" class="af" type="number" inputmode="numeric" min="1" max="100" value="30" /></label><label class="al">Quantidade<input id="spN" class="af" type="number" inputmode="numeric" min="1" max="25" value="1" /></label></div>' +
+      '<div class="arow2"><label class="al">Nível<input id="spLv" class="af" type="number" inputmode="numeric" min="1" max="1000" value="30" /></label><label class="al">Quantidade<input id="spN" class="af" type="number" inputmode="numeric" min="1" max="25" value="1" /></label></div>' +
       '<div class="chips">' + [5, 20, 40, 60, 100].map((n) => '<button data-lv="' + n + '">Lv.' + n + '</button>').join('') + '</div>' +
       '<div class="arow2"><label class="al">Some em<select id="spTtl" class="af"><option value="10">10 min</option><option value="30" selected>30 min</option><option value="60">1 hora</option><option value="240">4 horas</option></select></label>' +
       '<label class="al">Onde<select id="spWhere" class="af"><option value="me">Perto de mim</option><option value="xy">Coordenadas…</option></select></label></div>' +
@@ -81,7 +81,7 @@ const Admin = (() => {
     const names = (st?.online || []).map((p) => '<option value="' + esc(p.username) + '">').join('');
     return '<div class="section-title">Destinatário</div><input id="gvU" class="af" list="gvNames" placeholder="Nome do jogador" autocomplete="off" /><datalist id="gvNames">' + names + '</datalist>' +
       '<div class="section-title">Dar Pokémon</div>' + picker('gv') +
-      '<label class="al">Nível<input id="gvLv" class="af" type="number" inputmode="numeric" min="1" max="100" value="30" /></label><button class="btn primary" data-a="givePoke">🎁 Dar Pokémon</button>' +
+      '<label class="al">Nível<input id="gvLv" class="af" type="number" inputmode="numeric" min="1" max="1000" value="30" /></label><button class="btn primary" data-a="givePoke">🎁 Dar Pokémon</button>' +
       '<div class="section-title">Dar item</div><div class="arow2"><label class="al">Item<select id="gvItem" class="af">' + ITEMS.map(([v, l]) => '<option value="' + v + '">' + l + '</option>').join('') + '</select></label><label class="al">Quantidade<input id="gvN" class="af" type="number" inputmode="numeric" min="1" max="999" value="5" /></label></div>' +
       '<button class="btn primary" data-a="giveItem">🎁 Dar item</button><button class="ab" data-a="healGv">💖 Curar equipe do jogador</button><p class="hintline">Itens e cura não podem ser entregues a quem está em combate.</p>';
   }

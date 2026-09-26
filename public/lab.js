@@ -37,7 +37,7 @@ class LabScene extends Phaser.Scene {
     this.shadow = this.add.image(320, 422, 'shadow').setDepth(9);
     this.nameTag = this.add.text(320, 384, tagged($('hudName').textContent, MY_CLAN), { fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: '11px', fontStyle: 'bold', color: '#fff', backgroundColor: '#0b1020cc', padding: { x: 5, y: 2 } }).setOrigin(0.5).setDepth(20);
 
-    this.keys = this.input.keyboard.addKeys('W,A,S,D,UP,LEFT,DOWN,RIGHT,E');
+    this.keys = this.input.keyboard.addKeys('W,A,S,D,UP,LEFT,DOWN,RIGHT,E', false); // false = não captura (o chat continua digitando essas letras)
     this.input.on('pointerdown', (p, over) => {
       if (over && over.length) return;
       if (this.healing || this.waiting || this.leaving) return;

@@ -164,6 +164,7 @@ app.get('/api/inventory', auth, async (req, res) => {
 app.post('/api/craft', auth, async (req, res) => {
   const recipe = RECIPES.find((r) => r.id === req.body?.recipe);
   if (!recipe) return res.status(400).json({ error: 'Receita inválida' });
+  if (recipe.locked) return res.status(403).json({ error: 'Essa Pokébola só será obtida em eventos futuros.' }); // Ultra e Master não saem mais do craft
   if (battlingUsers.has(req.user.id)) return res.status(409).json({ error: 'Termine a batalha antes de criar itens' });
   const cost = { apricorns: recipe.cost.apricorns || 0, shards: recipe.cost.shards || 0 };
   const data = { apricorns: { decrement: cost.apricorns }, shards: { decrement: cost.shards } };

@@ -163,11 +163,11 @@ async function renderBag() {
     '<div class="item">' + ballIcon(k) + '<div><b>' + b.name + '</b><small>' + (b.guaranteed ? 'captura garantida' : 'captura ×' + b.mult) + '</small></div>' +
     '<span class="rar" style="--rc:' + RARITY[b.rarity].color + '">' + RARITY[b.rarity].label + '</span><em>' + balls[k] + '</em></div>').join('');
   const recipesHtml = RECIPES.map((r) => {
-    const can = Object.entries(r.cost).every(([k, n]) => mats[k] >= n);
+    const can = !r.locked && Object.entries(r.cost).every(([k, n]) => mats[k] >= n);
     const gives = Object.entries(r.gives).map(([k, n]) => n + '× ' + BALLS[k].name).join(', ');
-    const cost = Object.entries(r.cost).map(([k, n]) => chip(n, MATERIALS[k].name, mats[k] >= n)).join('');
+    const cost = r.locked ? '<span class="cost short">🔒 Só em eventos futuros</span>' : Object.entries(r.cost).map(([k, n]) => chip(n, MATERIALS[k].name, mats[k] >= n)).join('');
     return '<div class="recipe"><div>' + ballIcon(Object.keys(r.gives)[0]) + '<b>' + gives + '</b><div class="costs">' + cost + '</div></div>' +
-      '<button class="btn small" data-craft="' + r.id + '"' + (can ? '' : ' disabled') + '>Criar</button></div>';
+      '<button class="btn small" data-craft="' + r.id + '"' + (can ? '' : ' disabled') + '>' + (r.locked ? 'Em breve' : 'Criar') + '</button></div>';
   }).join('');
   $('bagBody').innerHTML = '<div class="section-title">Materiais</div><div class="mats">' + matsHtml + '</div>' +
     '<div class="section-title">Pokébolas</div>' + ballsHtml +

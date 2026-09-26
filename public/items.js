@@ -14,8 +14,8 @@ const MATERIALS = {
 const RECIPES = [
   { id: 'poke', gives: { poke: 3 }, cost: { apricorns: 3 } },
   { id: 'great', gives: { great: 1 }, cost: { apricorns: 4, shards: 1 } },
-  { id: 'ultra', gives: { ultra: 1 }, cost: { apricorns: 6, shards: 3 } },
-  { id: 'master', gives: { master: 1 }, cost: { apricorns: 30, shards: 12 } },
+  { id: 'ultra', gives: { ultra: 1 }, cost: { apricorns: 6, shards: 3 }, locked: true }, // fora do jogo por enquanto: virá em eventos futuros
+  { id: 'master', gives: { master: 1 }, cost: { apricorns: 30, shards: 12 }, locked: true }, // fora do jogo por enquanto: virá em eventos futuros
 ];
 
 if (typeof module !== 'undefined') module.exports = { BALLS, MATERIALS, RECIPES };

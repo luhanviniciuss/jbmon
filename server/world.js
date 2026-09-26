@@ -7,7 +7,6 @@ const { pickSpecies } = require('./battle.js');
 const RESPAWN_MS = 15000;
 const WILD_WANDER = 3; // tiles de distância máxima do "lar"
 const LEVEL_BONUS = { common: 0, uncommon: 1, rare: 2, epic: 4, legendary: 0 };
-const LEGENDARY_LEVEL = 100; // lendários da Rota são nível 100; nos outros mundos, o nível máximo do mundo (cfg.legend)
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 
 module.exports = function createWorld({ io, id, MAP, newId }) {
@@ -41,21 +40,20 @@ module.exports = function createWorld({ io, id, MAP, newId }) {
   const isWalkable = (tx, ty) => { const t = MAP[ty]?.[tx]; return t !== undefined && t !== 2 && t !== 3; };
 
   function spawnWild(water = false) {
-    const table = water ? tables.water : tables.land;
+    // Lendário NUNCA nasce selvagem: só como boss (raid). Mesmo que entre numa tabela por engano, aqui é filtrado.
+    const table = (water ? tables.water : tables.land).filter(([sid]) => SPECIES[sid].rarity !== 'legendary');
     const pool = water ? shore : grass;
     if (!cfg || !table.length || !pool.length) return null;
     let sid = pickSpecies(table);
-    // No máximo um de cada lendário vivo no mundo
-    for (let i = 0; i < 10 && SPECIES[sid].rarity === 'legendary' && [...wilds.values()].some((w) => w.species_id === sid); i++) sid = pickSpecies(table);
     const rarity = SPECIES[sid].rarity;
     let tile;
     for (let i = 0; i < 300; i++) {
       tile = pool[rand(0, pool.length - 1)];
       const d = Math.hypot(tile[0] - 50, tile[1] - 50);
-      if (rarity === 'legendary' ? d >= (isRoute ? 40 : 25) : Math.random() < 0.6 || d < 30) break; // lendários só longe do centro
+      if (Math.random() < 0.6 || d < 30) break;
     }
     const [tx, ty] = tile;
-    let level = rarity === 'legendary' ? (cfg.legend || LEGENDARY_LEVEL) : Math.min(cfg.cap, levelAt(tx, ty) + LEVEL_BONUS[rarity]);
+    let level = Math.min(cfg.cap, levelAt(tx, ty) + LEVEL_BONUS[rarity]);
     // Formas evoluídas nunca aparecem abaixo do nível em que a pré-evolução evolui (Pikachu >= 16, Raichu >= 32...)
     if (level < minLevel(sid)) level = minLevel(sid) + rand(0, 3);
     const w = { id: newId(), worldId: id, species_id: sid, level, water, tx, ty, homeX: tx, homeY: ty, x: tx * TILE + TILE / 2, y: ty * TILE + TILE / 2, busy: false };

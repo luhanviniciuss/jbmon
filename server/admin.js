@@ -134,6 +134,7 @@ module.exports = function registerAdmin(ctx) {
     const count = int(req.body.count ?? 1, 1, 25);
     const ttl = int(req.body.ttl_min ?? 30, 1, 240);
     if (!species_id || !SPECIES[species_id] || !level || !count || !ttl) return res.status(400).json({ error: 'Espécie, nível (1-' + MAX_LEVEL + '), quantidade (1-25) ou duração inválidos' });
+    if (SPECIES[species_id].rarity === 'legendary') return res.status(400).json({ error: 'Lendários só aparecem como boss: use "Chamar boss".' }); // nunca como selvagem
     let tx, ty;
     if (req.body.x != null && req.body.y != null) { tx = int(req.body.x, 0, 99); ty = int(req.body.y, 0, 99); if (tx == null || ty == null) return res.status(400).json({ error: 'Coordenadas inválidas (0 a 99)' }); }
     else {

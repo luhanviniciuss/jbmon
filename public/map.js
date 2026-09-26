@@ -17,8 +17,8 @@ const ARRIVE = { x: 50.5 * TILE, y: 49.5 * TILE };                            //
 const WORLDS = {
   route: { id: 'route', name: 'Rota 1', icon: '🌿', spawn: { x: 1600, y: 1600 }, biome: null },
   town: { id: 'town', name: 'Cidade', icon: '🏙', spawn: ARRIVE, biome: 'town', wild: null },
-  ice: { id: 'ice', name: 'Bioma de Gelo', icon: '❄', spawn: ARRIVE, biome: 'snow', wild: { land: 60, water: 16, min: 80, base: 80, scale: 1.7, cap: 200, legend: 200 } },
-  lava: { id: 'lava', name: 'Vulcão', icon: '🌋', spawn: ARRIVE, biome: 'volcano', wild: { land: 60, water: 0, min: 300, base: 300, scale: 3, cap: 500, legend: 500 } },
+  ice: { id: 'ice', name: 'Bioma de Gelo', icon: '❄', spawn: ARRIVE, biome: 'snow', wild: { land: 60, water: 16, min: 80, base: 80, scale: 1.7, cap: 200 } },
+  lava: { id: 'lava', name: 'Vulcão', icon: '🌋', spawn: ARRIVE, biome: 'volcano', wild: { land: 60, water: 0, min: 300, base: 300, scale: 3, cap: 500 } },
 };
 const WORLD_IDS = Object.keys(WORLDS);
 const GYM_EXIT = { x: (GYM.doorX + 0.5) * TILE, y: (GYM.doorY + 1.5) * TILE }; // em frente ao ginásio, na Rota

@@ -188,28 +188,24 @@ const WILD_TABLE = [
   [132, 1.2], [83, 1.5], [137, 1.2], [215, 1.5], [246, 1.2],
   // épicos
   [133, 0.8], [147, 0.8], [143, 0.6], [113, 0.5], [142, 0.5], [227, 0.5], [359, 0.5],
-  // lendários (só longe do centro, um de cada por vez). Os demais lendários surgem apenas como boss.
-  [144, 0.15], [145, 0.15], [146, 0.15], [150, 0.05], [151, 0.08], [243, 0.1], [244, 0.1], [377, 0.08], [378, 0.08], [379, 0.08],
+  // (lendários NUNCA aparecem soltos: só como boss, veja BOSS_TABLE)
 ];
 const WATER_TABLE = [
   [118, 14], [60, 14], [72, 12], [129, 10],
   [54, 6], [98, 6], [116, 6], [120, 6], [90, 5], [79, 5], [86, 5],
   [138, 1], [140, 1], [131, 0.7],
-  [245, 0.08],
 ];
 // Mundos extras (portais do ginásio). Nível mais alto que a Rota: veja WORLDS em map.js.
 const ICE_TABLE = [
   [238, 14], [215, 10], [86, 8], [90, 8], [41, 6], [39, 5], [35, 5], [66, 5], [63, 4], [27, 4],
   [124, 4], [87, 3], [91, 2.5], [42, 3], [67, 2], [64, 2],
   [131, 1.2], [133, 0.8], [147, 0.6],
-  [144, 0.2], [378, 0.1], [245, 0.1], // lendários do Gelo: sempre no nível máximo do mundo (200)
 ];
 const ICE_WATER_TABLE = [[86, 14], [90, 12], [87, 6], [91, 4], [60, 5], [131, 1.5]];
 const LAVA_TABLE = [
   [4, 12], [37, 10], [74, 10], [240, 8], [228, 8], [50, 8], [95, 6], [111, 5], [104, 5],
   [58, 5], [77, 5], [5, 4], [75, 4], [51, 3.5], [246, 3], [126, 3], [229, 2.5],
   [59, 0.9], [78, 0.9], [136, 0.6], [6, 0.5], [248, 0.4],
-  [146, 0.15], [244, 0.1], [250, 0.05], [383, 0.1], [377, 0.1], // lendários do Vulcão: sempre no nível máximo do mundo (500)
 ];
 const WORLD_TABLES = { ice: { land: ICE_TABLE, water: ICE_WATER_TABLE }, lava: { land: LAVA_TABLE, water: [] } };
 // Lendários que aparecem como boss a cada 3 h: [species_id, peso]

@@ -32,7 +32,8 @@ class LabScene extends Phaser.Scene {
     this.drawUi();
 
     // avatar do jogador (mesma textura do mapa)
-    this.player = this.add.sprite(320, 410, 'player').setDepth(10);
+    this.player = this.add.sprite(320, 410, 'player', 'down0').setDepth(10);
+    this.dir = 'down';
     this.shadow = this.add.image(320, 422, 'shadow').setDepth(9);
     this.nameTag = this.add.text(320, 384, tagged($('hudName').textContent, MY_CLAN), { fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: '11px', fontStyle: 'bold', color: '#fff', backgroundColor: '#0b1020cc', padding: { x: 5, y: 2 } }).setOrigin(0.5).setDepth(20);
 
@@ -329,7 +330,11 @@ class LabScene extends Phaser.Scene {
       const ins = x > M.x - 10 && x < M.x + M.w + 10 && y > M.y - 4 && y < M.y + M.h + 14; // corpo do avatar
       return !ins;
     };
+    const bx = p.x, by = p.y;
     if (okAt(p.x + dx, p.y)) p.x += dx;
     if (okAt(p.x, p.y + dy)) p.y += dy;
+    const mx = p.x - bx, my = p.y - by, moved = Math.hypot(mx, my) > 0.05;
+    if (moved) this.dir = dirOf(mx, my);
+    p.setFrame(avatarFrame(this.dir, moved, this.time.now));
   }
 }

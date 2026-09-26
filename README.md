@@ -91,6 +91,9 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 - **Auditoria**: toda ação fica na tabela `AdminLog` (quem, o quê, alvo e detalhes).
 - **Selo ADM** no chat e nomes reservados (`admin`, `moderador`, `gm`, `sistema`…) que jogadores comuns não conseguem registrar.
 
+## Personagem
+- O avatar é uma sprite sheet gerada em código (`drawAvatar` em `public/game.js`): boné com pompom, cabelo, rosto, jaqueta, braços, cinto, calça e tênis, em **4 direções** (frente, costas, esquerda, direita) com **animação de caminhada** (passos alternados, braços balançando e leve balanço do corpo). Você é vermelho; os outros jogadores ganham uma cor de jaqueta (6 opções) escolhida pelo nome, e o avatar também anda no laboratório.
+
 ## Laboratório de cura (Centro Pokémon)
 - No meio do mapa há um **prédio** (Centro Pokémon, sólido) com a porta no tile central de baixo. Pisar na porta leva ao **laboratório** (cena `LabScene`, `public/lab.js`): sala metálica com piso em grade, tubulações e a **Máquina de Incubação** com 6 tubos de vidro (os Pokémon da equipe aparecem dentro; vermelhos = machucados). A porta verde de baixo devolve você ao mapa, em frente ao prédio.
 - **Cura**: toque no botão **CURAR EQUIPE** (ou na máquina, ou tecla **E** perto dela; longe, o avatar anda até lá). Dura **15 s**: os tubos enchem de líquido verde e brilham, o avatar fica parado e uma barra de progresso aparece acima da máquina. Ao terminar, **todos os Pokémon** voltam ao HP máximo, as Pokébolas são repostas até 10 e aparece "Pokémon curados!". Se a equipe já está saudável, o servidor avisa na hora e não gasta os 15 s.

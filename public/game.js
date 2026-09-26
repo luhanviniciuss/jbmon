@@ -10,6 +10,15 @@ let BOSS = null; // { species_id, x, y, until }
 let BOSS_NEXT = null; // timestamp local do próximo boss
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const tagged = (name, clan) => (clan?.tag ? '[' + clan.tag + '] ' : '') + name;
+// ===== Avatar do jogador: sprite sheet 3 quadros (parado + 2 passos) x 4 direções, desenhado em código =====
+const AVATAR_DIRS = ['down', 'left', 'right', 'up'];
+const WALK_SEQ = [1, 0, 2, 0];
+const AVATAR_STYLES = [ // [jaqueta, boné]
+  [0x3d8bff, 0x2b62c4], [0x3ddc97, 0x22a56c], [0xb07cff, 0x7f4fd6], [0xffb02e, 0xd98a00], [0xff7ab8, 0xd94d92], [0x39c7d6, 0x1e93a1],
+];
+const dirOf = (dx, dy) => (Math.abs(dy) > Math.abs(dx) ? (dy > 0 ? 'down' : 'up') : dx < 0 ? 'left' : 'right');
+const avatarFrame = (dir, moving, time) => dir + (moving ? WALK_SEQ[Math.floor(time / 130) % 4] : 0);
+const nameHash = (t) => { let h = 0; for (const c of t) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const typeChips = (id) => SPECIES[id].types.map((t) => '<span class="tchip" style="--tc:' + TYPES[t].color + '">' + TYPES[t].label + '</span>').join('');
 let INV = { poke: 0, great: 0, ultra: 0, master: 0 };
 const invTotal = (i) => Object.values(i).reduce((a, b) => a + b, 0);
@@ -419,7 +428,7 @@ class WorldScene extends Phaser.Scene {
     this.socket.on('player:joined', (p) => { this.addOther(p); toast(`${p.username} entrou no mundo`); });
     this.socket.on('player:moved', (p) => {
       const o = this.others.get(p.id);
-      if (o) this.tweens.add({ targets: o.sprite, x: p.x, y: p.y, duration: 60 });
+      if (o) { o.dir = p.dir || o.dir; o.moveUntil = this.time.now + 220; this.tweens.add({ targets: o.sprite, x: p.x, y: p.y, duration: 60 }); }
     });
     this.socket.on('player:left', (id) => {
       const o = this.others.get(id);
@@ -556,6 +565,80 @@ class WorldScene extends Phaser.Scene {
     for (const [px, py] of [[5, 12], [16, 8], [26, 14], [10, 24], [22, 27]]) { c.beginPath(); c.moveTo(4 * TILE + px - 3, py + 6); c.lineTo(4 * TILE + px, py - 4); c.lineTo(4 * TILE + px + 3, py + 6); c.stroke(); }
     tex.refresh();
 
+    // Personagem 32x32 com boné, cabelo, rosto, jaqueta, braços, calça e tênis. Anda com passos alternados e balanço dos braços.
+    const drawAvatar = (key, jacket, cap) => {
+      const SKIN = 0xffd9b0, SKIN2 = 0xe8b98a, HAIR = 0x3b2a20, PANTS = 0x2b3a67, PANTS2 = 0x1f2b4d, SHOE = 0x1b1f33, SOLE = 0xf4f6ff, WHITE = 0xffffff;
+      const shade = (c, f) => { const ch = (v) => Math.max(0, Math.min(255, Math.round(v * f))); return (ch((c >> 16) & 255) << 16) | (ch((c >> 8) & 255) << 8) | ch(c & 255); };
+      const g = this.make.graphics({ x: 0, y: 0, add: false });
+      AVATAR_DIRS.forEach((dir, row) => {
+        for (let step = 0; step < 3; step++) {
+          const ox = step * 32, oy = row * 32;
+          const R = (x, y, w, h, c) => g.fillStyle(c).fillRect(ox + x, oy + y, w, h);
+          const swing = step === 1 ? 1 : step === 2 ? -1 : 0;        // passo: perna/braço da frente
+          const bob = step ? -1 : 0;                                  // corpo sobe um pouco ao andar
+          const side = dir === 'left' || dir === 'right';
+          const f = dir === 'left' ? -1 : 1;
+          // pernas + tênis
+          if (!side) {
+            const l = swing === 1 ? 2 : 0, r = swing === -1 ? 2 : 0;    // perna levantada fica mais curta
+            R(11, 22, 4, 6 - l, PANTS); R(17, 22, 4, 6 - r, PANTS);
+            R(11, 22, 1, 6 - l, PANTS2); R(20, 22, 1, 6 - r, PANTS2);
+            R(10, 28 - l, 5, 3, SHOE); R(17, 28 - r, 5, 3, SHOE);
+            R(10, 30 - l, 5, 1, SOLE); R(17, 30 - r, 5, 1, SOLE);
+          } else {
+            const back = swing === 0 ? 0 : -3 * swing * f, front = swing === 0 ? 0 : 3 * swing * f;
+            R(14 + back, 22, 4, 6, PANTS2); R(13 + back + (f < 0 ? 0 : 1), 28, 5, 3, shade(SHOE, 0.8));
+            R(14 + front, 22, 4, 6, PANTS); R(13 + front + (f < 0 ? 0 : 1), 28, 5, 3, SHOE); R(13 + front + (f < 0 ? 0 : 1), 30, 5, 1, SOLE);
+          }
+          // tronco / braços
+          const ty = 14 + bob;
+          if (!side) {
+            R(10, ty, 12, 8, dir === 'up' ? shade(jacket, 0.92) : jacket);
+            R(10, ty + 7, 12, 1, shade(jacket, 0.6));
+            R(10, ty + 6, 12, 2, 0x2a2f45);                             // cinto
+            R(15, ty + 6, 2, 2, 0xffd54a);                              // fivela
+            if (dir === 'down') { R(14, ty, 4, 4, WHITE); R(15, ty, 2, 2, 0xd9def5); }
+            else { R(9, ty, 14, 7, shade(jacket, 0.7)); R(11, ty + 1, 10, 5, cap); R(11, ty + 1, 10, 1, shade(cap, 1.25)); } // mochila
+            const la = swing === -1 ? -1 : swing === 1 ? 1 : 0;
+            R(7, ty + 1 + la, 3, 7, jacket); R(22, ty + 1 - la, 3, 7, jacket);
+            R(7, ty + 7 + la, 3, 2, SKIN); R(22, ty + 7 - la, 3, 2, SKIN);
+            R(7, ty + 1 + la, 1, 6, shade(jacket, 0.72)); R(24, ty + 1 - la, 1, 6, shade(jacket, 0.72));
+          } else {
+            R(12, ty, 8, 8, jacket); R(12, ty + 6, 8, 2, 0x2a2f45);
+            if (f > 0) R(11, ty + 1, 2, 6, shade(jacket, 0.7)); else R(19, ty + 1, 2, 6, shade(jacket, 0.7)); // mochila atrás
+            const ax = 14 + (swing === 0 ? 0 : 2 * swing * f);
+            R(ax, ty + 1, 4, 7, shade(jacket, 0.85)); R(ax, ty + 7, 4, 2, SKIN2);
+          }
+          // cabeça
+          const hy = 5 + bob;
+          if (!side) {
+            R(10, hy + 1, 12, 8, dir === 'up' ? HAIR : SKIN);
+            if (dir === 'down') {
+              R(10, hy + 7, 12, 2, SKIN2);
+              R(9, hy + 3, 2, 4, HAIR); R(21, hy + 3, 2, 4, HAIR);
+              R(13, hy + 4, 2, 3, 0x1b1f33); R(18, hy + 4, 2, 3, 0x1b1f33);   // olhos
+              R(13, hy + 4, 1, 1, WHITE); R(18, hy + 4, 1, 1, WHITE);
+              R(15, hy + 7, 2, 1, 0xb5654a);                                   // boca
+            }
+            R(9, hy - 2, 14, 4, cap); R(9, hy - 2, 14, 1, shade(cap, 1.25));   // boné
+            R(9, hy + 1, 14, dir === 'down' ? 2 : 1, shade(cap, 0.75));         // aba
+            R(15, hy - 3, 2, 1, WHITE);                                         // pompom
+          } else {
+            R(11, hy + 1, 10, 8, SKIN); R(11, hy + 7, 10, 2, SKIN2);
+            R(f < 0 ? 15 : 11, hy + 1, 6, 6, HAIR);                             // cabelo (lado de trás)
+            R(f < 0 ? 12 : 18, hy + 4, 2, 3, 0x1b1f33); R(f < 0 ? 12 : 19, hy + 4, 1, 1, WHITE);
+            R(9, hy - 2, 14, 4, cap); R(9, hy - 2, 14, 1, shade(cap, 1.25));
+            R(f < 0 ? 6 : 21, hy + 1, 5, 2, shade(cap, 0.75));                  // aba do boné virada pra frente
+            R(15, hy - 3, 2, 1, WHITE);
+          }
+        }
+      });
+      g.generateTexture(key, 96, 128);
+      const tex = this.textures.get(key);
+      AVATAR_DIRS.forEach((dir, row) => { for (let s = 0; s < 3; s++) tex.add(dir + s, 0, s * 32, row * 32, 32, 32); });
+    };
+    drawAvatar('player', 0xe53950, 0xb02338);
+    AVATAR_STYLES.forEach(([j, c], i) => drawAvatar('other' + i, j, c));
     const avatar = (key, body) => {
       const g = this.make.graphics({ x: 0, y: 0, add: false });
       g.fillStyle(body).fillRoundedRect(7, 12, 18, 18, 6);
@@ -564,8 +647,6 @@ class WorldScene extends Phaser.Scene {
       g.fillStyle(0x1b1f33).fillRect(13, 10, 2, 3).fillRect(18, 10, 2, 3);
       g.generateTexture(key, 32, 32);
     };
-    avatar('player', 0xe53950);
-    avatar('other', 0x3d8bff);
     const wd = this.make.graphics({ x: 0, y: 0, add: false });
     wd.fillStyle(0xffb02e).fillCircle(10, 10, 9).lineStyle(2, 0xffffff).strokeCircle(10, 10, 9);
     wd.generateTexture('wilddot', 20, 20);
@@ -580,7 +661,8 @@ class WorldScene extends Phaser.Scene {
 
   spawnSelf({ x, y, username }) {
     this.myShadow = this.add.image(x, y, 'shadow').setDepth(8);
-    this.player = this.physics.add.sprite(x, y, 'player').setDepth(10);
+    this.player = this.physics.add.sprite(x, y, 'player', 'down0').setDepth(10);
+    this.pDir = 'down';
     this.player.body.setSize(18, 18).setOffset(7, 12);
     this.player.setCollideWorldBounds(true);
     this.physics.add.collider(this.player, this.layer);
@@ -593,11 +675,11 @@ class WorldScene extends Phaser.Scene {
   addOther(p) {
     if (this.others.has(p.id)) return;
     const shadow = this.add.image(p.x, p.y + 12, 'shadow').setDepth(8);
-    const sprite = this.add.sprite(p.x, p.y, 'other').setDepth(9);
+    const sprite = this.add.sprite(p.x, p.y, 'other' + (nameHash(p.username) % AVATAR_STYLES.length), 'down0').setDepth(9);
     sprite.setInteractive(new Phaser.Geom.Rectangle(-10, -14, 52, 60), Phaser.Geom.Rectangle.Contains);
     sprite.input.cursor = 'pointer';
     sprite.on('pointerdown', (ptr) => Arena.playerMenu(p.id, ptr.event?.clientX ?? ptr.x, ptr.event?.clientY ?? ptr.y));
-    const o = { sprite, shadow, name: p.username, label: this.label(tagged(p.username, p.clan)), tag: this.combatTag(), combat: null, clan: p.clan || null };
+    const o = { sprite, shadow, name: p.username, label: this.label(tagged(p.username, p.clan)), tag: this.combatTag(), combat: null, clan: p.clan || null, dir: p.dir || 'down', moveUntil: 0 };
     this.others.set(p.id, o);
     this.setCombat(p.id, p.combat);
     if (p.hidden) this.setHidden(p.id, true);
@@ -787,6 +869,9 @@ class WorldScene extends Phaser.Scene {
     const len = Math.hypot(vx, vy);
     if (len > 1) { vx /= len; vy /= len; }
     this.player.setVelocity(vx * PLAYER_SPEED, vy * PLAYER_SPEED);
+    if (vx || vy) this.pDir = dirOf(vx, vy);
+    this.player.setFrame(avatarFrame(this.pDir, len > 0.05 && !inBattle && !this.inLab, time));
+    this.others.forEach((o) => o.sprite.setFrame(avatarFrame(o.dir, time < o.moveUntil, time)));
 
     const p = this.player;
     this.myLabel.setPosition(p.x, p.y - 26);

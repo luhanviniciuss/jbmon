@@ -4,10 +4,12 @@ let mode = 'login';
 let inBattle = false;
 let MY_ID = null;
 let IS_ADMIN = false; // vem do servidor no login; o servidor confere de novo a cada ação do painel
+let MY_CLAN = null; // { id, tag, name, role }
 let GROUP = null; // { id, leader, members:[{id, username}] }
 let BOSS = null; // { species_id, x, y, until }
 let BOSS_NEXT = null; // timestamp local do próximo boss
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const tagged = (name, clan) => (clan?.tag ? '[' + clan.tag + '] ' : '') + name;
 const typeChips = (id) => SPECIES[id].types.map((t) => '<span class="tchip" style="--tc:' + TYPES[t].color + '">' + TYPES[t].label + '</span>').join('');
 let INV = { poke: 0, great: 0, ultra: 0, master: 0 };
 const invTotal = (i) => Object.values(i).reduce((a, b) => a + b, 0);
@@ -120,7 +122,7 @@ function renderParty() {
 }
 
 async function openParty(open = !$('drawer').classList.contains('open')) {
-  if (open) { $('bag').classList.remove('open'); $('group').classList.remove('open'); }
+  if (open) { $('bag').classList.remove('open'); $('group').classList.remove('open'); $('arena').classList.remove('open'); }
   const drawer = $('drawer');
   drawer.classList.toggle('open', open);
   drawer.setAttribute('aria-hidden', !open);
@@ -188,6 +190,11 @@ function setGroupLabel() {
   if (tab) { tab.hidden = !GROUP; if (!GROUP && chat.tab === 'group') setChatTab('global'); }
 }
 
+function setClanLabel() {
+  const tab = document.querySelector('.ctab[data-ch=clan]');
+  if (tab) { tab.hidden = !MY_CLAN; if (!MY_CLAN && chat.tab === 'clan') setChatTab('global'); }
+}
+
 function renderGroup() {
   const leader = !GROUP || GROUP.leader === MY_ID;
   const members = GROUP
@@ -213,6 +220,7 @@ function openGroup(open = !$('group').classList.contains('open')) {
   if (!open) return;
   $('drawer').classList.remove('open');
   $('bag').classList.remove('open');
+  $('arena').classList.remove('open');
   renderGroup();
 }
 $('groupBtn').addEventListener('click', () => openGroup());
@@ -256,19 +264,21 @@ function buildMinimap(mapData) {
 }
 
 // ---------- Chat ----------
-const chat = { tab: 'global', msgs: { global: [], group: [] }, unread: { global: 0, group: 0 } };
+const chat = { tab: 'global', msgs: { global: [], group: [], clan: [] }, unread: { global: 0, group: 0, clan: 0 } };
 const mobileMQ = matchMedia('(max-width: 640px)');
 const hueOf = (t) => { let h = 0; for (const c of t) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
 const isChatVisible = () => { const c = $('chat'); return c.classList.contains('open') && !c.classList.contains('min') && !c.classList.contains('gone'); };
 
 function chatLine(m) {
   const el = document.createElement('div');
-  el.className = 'cm' + (m.ch === 'group' ? ' g' : m.ch === 'w' ? ' w' : '') + (m.fromId === MY_ID ? ' me' : '');
+  el.className = 'cm' + (m.ch === 'group' ? ' g' : m.ch === 'clan' ? ' c' : m.ch === 'w' ? ' w' : '') + (m.fromId === MY_ID ? ' me' : '');
   const t = document.createElement('span');
   t.className = 't';
   t.textContent = new Date(m.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   el.append(t);
   if (m.ch === 'group') { const g = document.createElement('span'); g.className = 'tag'; g.textContent = '[Grupo]'; el.append(g); }
+  if (m.ch === 'clan') { const g = document.createElement('span'); g.className = 'tag'; g.textContent = '[Clã]'; el.append(g); }
+  else if (m.tag) { const g = document.createElement('span'); g.className = 'ctag'; g.textContent = '[' + m.tag + ']'; el.append(g); }
   if (m.admin) { const a = document.createElement('span'); a.className = 'adm'; a.textContent = 'ADM'; el.append(a); }
   const who = document.createElement('b');
   who.textContent = m.ch === 'w' ? (m.fromId === MY_ID ? 'para ' + m.to : m.from + ' sussurra') : m.from;
@@ -283,14 +293,15 @@ function renderChat() {
   log.scrollTop = log.scrollHeight;
 }
 function updateChatBadges() {
-  const n = chat.unread.global + chat.unread.group;
+  const n = chat.unread.global + chat.unread.group + chat.unread.clan;
   $('chatBadge').hidden = n === 0;
   $('chatBadge').textContent = n > 9 ? '9+' : n;
   document.querySelector('.ctab[data-ch=global] .udot').hidden = !chat.unread.global || chat.tab === 'global';
   document.querySelector('.ctab[data-ch=group] .udot').hidden = !chat.unread.group || chat.tab === 'group';
+  document.querySelector('.ctab[data-ch=clan] .udot').hidden = !chat.unread.clan || chat.tab === 'clan';
 }
 function addChat(m) {
-  const ch = m.ch === 'group' ? 'group' : 'global'; // sussurros aparecem na aba Global
+  const ch = m.ch === 'group' ? 'group' : m.ch === 'clan' ? 'clan' : 'global'; // sussurros aparecem na aba Global
   const list = chat.msgs[ch];
   list.push(m);
   if (list.length > 120) list.shift();
@@ -350,11 +361,12 @@ function initChat() {
     const raw = $('chatInput').value.trim();
     if (!raw) return;
     const w = raw.match(/^\/(?:w|msg|t)\s+(\S+)\s+([\s\S]+)$/i);
-    const payload = w ? { ch: 'w', to: w[1], text: w[2] } : /^\/g\s+/i.test(raw) ? { ch: 'group', text: raw.replace(/^\/g\s+/i, '') } : { ch: chat.tab, text: raw };
+    const payload = w ? { ch: 'w', to: w[1], text: w[2] } : /^\/g\s+/i.test(raw) ? { ch: 'group', text: raw.replace(/^\/g\s+/i, '') } : /^\/c\s+/i.test(raw) ? { ch: 'clan', text: raw.replace(/^\/c\s+/i, '') } : { ch: chat.tab, text: raw };
     window.worldScene?.socket.emit('chat:send', payload);
     $('chatInput').value = '';
   });
   setGroupLabel();
+  setClanLabel();
   renderChat();
 }
 
@@ -396,6 +408,8 @@ class WorldScene extends Phaser.Scene {
     this.socket.on('online', (n) => { $('online').textContent = n; });
     this.socket.on('players:init', ({ self, others, balls }) => {
       MY_ID = self.id;
+      MY_CLAN = self.clan || null;
+      setClanLabel();
       setBalls(balls);
       this.others.forEach((o) => { o.sprite.destroy(); o.label.destroy(); o.shadow.destroy(); o.tag.destroy(); });
       this.others.clear();
@@ -421,8 +435,14 @@ class WorldScene extends Phaser.Scene {
     this.socket.on('inventory', (inv) => setBalls(inv)); // um admin entregou itens
     this.socket.on('banned', ({ reason }) => { window.__adminEnd = true; showOffline('Conta banida', 'Um administrador baniu esta conta.' + (reason ? ' Motivo: ' + reason : '')); });
     this.socket.on('kicked', ({ reason }) => { window.__adminEnd = true; showOffline('Você foi expulso', 'Um administrador desconectou você.' + (reason ? ' Motivo: ' + reason : '')); });
+    this.socket.on('player:clan', ({ id, clan }) => {
+      if (id === MY_ID) { MY_CLAN = clan ? { ...MY_CLAN, ...clan } : null; this.myLabel?.setText(tagged($('hudName').textContent, clan)); setClanLabel(); return; }
+      const o = this.others.get(id);
+      if (o) { o.clan = clan; o.label.setText(tagged(o.name, clan)); }
+    });
     this.socket.on('player:combat', ({ id, combat }) => this.setCombat(id, combat));
     Battle.init(this.socket);
+    Arena.init(this.socket);
     this.socket.on('notice', ({ msg, big }) => toast(msg, big));
     this.socket.on('boss:state', ({ boss, nextIn }) => { BOSS_NEXT = nextIn != null ? Date.now() + nextIn : null; this.setBoss(boss); });
     this.socket.on('group:update', (gr) => { GROUP = gr; setGroupLabel(); if ($('group').classList.contains('open')) renderGroup(); });
@@ -510,7 +530,7 @@ class WorldScene extends Phaser.Scene {
     this.player.body.setSize(18, 18).setOffset(7, 12);
     this.player.setCollideWorldBounds(true);
     this.physics.add.collider(this.player, this.layer);
-    this.myLabel = this.label(username);
+    this.myLabel = this.label(tagged(username, MY_CLAN));
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
     this.cameras.main.setBounds(0, 0, MAP_W * TILE, MAP_H * TILE);
     this.cameras.main.fadeIn(600);
@@ -520,7 +540,7 @@ class WorldScene extends Phaser.Scene {
     if (this.others.has(p.id)) return;
     const shadow = this.add.image(p.x, p.y + 12, 'shadow').setDepth(8);
     const sprite = this.add.sprite(p.x, p.y, 'other').setDepth(9);
-    const o = { sprite, shadow, name: p.username, label: this.label(p.username), tag: this.combatTag(), combat: null };
+    const o = { sprite, shadow, name: p.username, label: this.label(tagged(p.username, p.clan)), tag: this.combatTag(), combat: null, clan: p.clan || null };
     this.others.set(p.id, o);
     this.setCombat(p.id, p.combat);
   }

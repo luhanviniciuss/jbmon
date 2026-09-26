@@ -14,6 +14,9 @@ public/items.js        Pokébolas, materiais e receitas de craft (compartilhado)
 server/battle.js       Regras de batalha, tipos, dano, captura, EXP
 server/raid.js         Grupos, boss lendário a cada 3 h e raid cooperativa
 server/chat.js         Chat global, de grupo e sussurros
+server/clan.js         Clãs: criar, convidar, cargos, ranking (/api/clan/*)
+server/pvp.js          PvP solo, de grupo e guerra de clãs; rating (/api/pvp/*)
+public/arena.js        Arena: clã, desafios, ranking e tela da batalha PvP
 server/admin.js        API do painel de administração (/api/admin/*)
 server/moderation.js   Bans e silenciamentos ativos (cache do banco)
 public/admin.js        Interface do painel admin (só para contas admin)
@@ -84,6 +87,14 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 - **Punições**: o ban impede login, uso da API e conexão do socket (mesmo com token antigo), expulsa o jogador na hora e **sobrevive a reinícios** (colunas `banned_until` / `muted_until`). Silenciados não conseguem falar em nenhum canal e recebem o motivo. Admins não podem ser banidos/silenciados por outros admins nem por si mesmos.
 - **Auditoria**: toda ação fica na tabela `AdminLog` (quem, o quê, alvo e detalhes).
 - **Selo ADM** no chat e nomes reservados (`admin`, `moderador`, `gm`, `sistema`…) que jogadores comuns não conseguem registrar.
+
+## Clãs e PvP
+- **Onde**: botão ⚔ **Arena** (atalho K), com as abas **Desafiar**, **Clã** e **Ranking**. Funciona no celular (gaveta) e no PC.
+- **Clã**: qualquer jogador cria um (nome 3-16, tag 2-4 letras/números, únicos) e vira **líder**; até **30 membros**; cargos **líder > oficial > membro**. Líder e oficiais convidam (o convidado aceita em até 60 s) e expulsam quem tem cargo menor; só o líder promove/rebaixa, passa a liderança e dissolve. O líder não pode sair sem passar a liderança; clã vazio é apagado. Todas as permissões são conferidas no servidor a cada ação. A **tag** aparece ao lado do nome no mapa e no chat, e há um canal **Clã** no chat (`/c mensagem`).
+- **PvP seguro**: todos lutam no **Lv.50** com **cópias** de até 3 Pokémon da equipe (do slot 1 ao 3). Ninguém perde HP, EXP ou Pokémon; só o ranking é gravado. Turnos simultâneos de 30 s (golpe, golpe forte ou troca; quem fica ausente 3 turnos desiste; desconectar = desistir do duelo). Usa a mesma tabela de tipos/críticos da batalha selvagem.
+- **Modos**: **Solo 1x1**; **Grupo** (líder do grupo desafia o líder de outro grupo do mesmo tamanho, 2 a 4: o jogador N de um lado enfrenta o N do outro, em paralelo); **Guerra de clãs** (líder/oficial de um clã contra líder/oficial de outro, com um grupo só de membros do clã ou 1x1). Vence o lado com mais duelos ganhos (desempate: mais HP restante).
+- **Ranking**: rating estilo Elo (começa em 1000, mínimo 100) em toda luta; guerra de clãs também dá **+30 pontos** ao clã vencedor e **-10** ao perdedor (nunca abaixo de 0). Aba Ranking mostra os 20 melhores jogadores e clãs. **Anti-farm**: as mesmas duas pontas lutando mais de 4 vezes por hora não rendem mais pontos.
+- **Persistência**: rating, vitórias/derrotas e pontos do clã gravados numa transação (`durable`); clãs em `Clan`, vínculo em `User.clan_id`/`clan_role`.
 
 ## Como funciona
 - **Auth**: `POST /api/register|login` devolve um JWT, usado no handshake do Socket.io e na API (`GET /api/party`).

@@ -475,6 +475,7 @@ module.exports = function createRaidSystem(ctx) {
   }
 
   return { bind, onDisconnect, onMove: (uid) => tryStart(uid), inRaid: (uid) => raids.has(uid),
+    groupInfo: (uid) => { const g = groups.get(groupOf.get(uid)); return g ? { id: g.id, leader: g.leader, members: [...g.members] } : null; },
     adminSpawnBoss: (species_id) => (spawnBoss(species_id || undefined, 60 * 60000) ? { ok: true } : { error: 'Há uma raid em andamento' }),
     bossInfo: () => (boss ? { species_id: boss.species_id, tx: boss.tx, ty: boss.ty, busy: boss.busy, leftMin: Math.max(0, Math.round((boss.expiresAt - Date.now()) / 60000)) } : null),
     groupMembers: (uid) => { const g = groups.get(groupOf.get(uid)); return g ? [...g.members] : []; } };

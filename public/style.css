@@ -414,3 +414,45 @@ textarea.af { resize: vertical; }
 
 /* itens de listas rolaveis nao devem encolher (ex.: caixa de aviso do painel admin) */
 .list > * { flex-shrink: 0; }
+
+/* ---------- Arena: clã, PvP, ranking ---------- */
+.ctag { color: var(--gold); font-weight: 800; margin-right: 4px; }
+.cm.c .tag { color: var(--gold); font-weight: 700; margin-right: 6px; }
+.cm.c { color: #ffe9b0; }
+.modes { display: flex; gap: 6px; flex-wrap: wrap; }
+.modes button { flex: 1 1 auto; min-height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,.06); color: var(--muted); font: 700 13px var(--font); cursor: pointer; }
+.modes button.active { background: linear-gradient(135deg, var(--red), var(--red2)); color: #fff; border-color: transparent; }
+.plist { display: flex; flex-direction: column; gap: 8px; }
+.item.pl { grid-template-columns: 28px minmax(0, 1fr) auto; }
+.item.rk { grid-template-columns: 26px minmax(0, 1fr) auto; }
+.item.rk > b { color: var(--gold); text-align: center; }
+.item.cm-row { grid-template-columns: 12px minmax(0, 1fr) auto; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: #56607f; }
+.dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.mact { display: flex; gap: 4px; }
+.mact button { min-width: 40px; min-height: 40px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.08); cursor: pointer; font-size: 15px; }
+.clanhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 17px; }
+.clanhead span { font-size: 12px; color: var(--gold); font-weight: 700; }
+.clanfoot { display: flex; gap: 8px; flex-wrap: wrap; }
+.invite-form { flex-wrap: wrap; }
+.list .btn.small { align-self: flex-start; }
+
+/* batalha PvP */
+.battle.pvp { background: linear-gradient(#3a2a6e 0, #7a5cc8 46%, #4a3b7a 46%, #2c2350 100%); }
+.pv-top { position: absolute; z-index: 4; right: 12px; top: calc(12px + var(--safe-t)); display: flex; gap: 10px; align-items: center; font-weight: 800; font-size: 13px; padding: 6px 12px; border-radius: 999px; background: rgba(0,0,0,.35); color: #fff; }
+.pv-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.pips { display: inline-flex; gap: 4px; }
+.pips i { width: 10px; height: 10px; border-radius: 50%; background: var(--green); border: 1px solid rgba(255,255,255,.5); }
+.pips i.ko { background: #55506b; }
+.pv-duels { position: absolute; z-index: 4; left: 12px; top: calc(112px + var(--safe-t)); display: flex; flex-direction: column; gap: 4px; max-width: 54vw; }
+.pv-duels span { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 8px; background: rgba(0,0,0,.4); color: #d5d9f2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pv-duels span.me { outline: 1px solid var(--gold); color: #fff; }
+.pv-duels span.done { opacity: .6; }
+.pv-msg { margin: 0; min-height: 44px; font-size: 16px; font-weight: 600; line-height: 1.35; }
+.pvres { text-align: center; padding: 10px; border-radius: 14px; background: rgba(255,255,255,.08); }
+.pvres h3 { margin: 0 0 4px; font-size: 24px; }
+.pvres p { margin: 4px 0; }
+.pvres.win h3 { color: var(--gold); } .pvres.lose h3 { color: var(--red); }
+#pvActions .act:not(.a1):not(.a2) { grid-column: auto; }
+@media (max-width: 640px) { .pv-duels { top: calc(132px + var(--safe-t)); max-width: 48vw; } }
+@media (max-height: 520px) { #pvActions { grid-template-columns: repeat(4, 1fr); } .pv-msg { min-height: 0; font-size: 14px; } }

@@ -18,6 +18,12 @@ model User {
   ban_reason    String?
   muted_until   DateTime? // silenciado no chat até esta data
   mute_reason   String?
+  clan_id       Int?
+  clan          Clan?     @relation(fields: [clan_id], references: [id], onDelete: SetNull)
+  clan_role     String    @default("member") // "leader" | "officer" | "member"
+  pvp_rating    Int       @default(1000)
+  pvp_wins      Int       @default(0)
+  pvp_losses    Int       @default(0)
   pokeballs     Int       @default(10)
   greatballs    Int       @default(0)
   ultraballs    Int       @default(0)
@@ -60,4 +66,16 @@ model AdminLog {
   target     String   @default("")
   details    String   @default("")
   created_at DateTime @default(now())
+}
+
+model Clan {
+  id         Int      @id @default(autoincrement())
+  name       String
+  name_key   String   @unique // nome em minúsculas: unicidade sem diferenciar maiúsculas
+  tag        String   @unique // 2-4 letras/números em maiúsculas
+  points     Int      @default(0)
+  wins       Int      @default(0)
+  losses     Int      @default(0)
+  created_at DateTime @default(now())
+  members    User[]
 }

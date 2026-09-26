@@ -5,7 +5,7 @@ const MAX_LEN = 200;
 const BURST = 5; // mensagens seguidas permitidas
 const REFILL_MS = 1500; // 1 mensagem nova liberada a cada 1,5 s
 
-module.exports = function createChat({ io, socketByUser, meByUser, groupMembers, moderation }) {
+module.exports = function createChat({ io, socketByUser, meByUser, groupMembers, clanMembers, moderation }) {
   const history = [];
   const buckets = new Map(); // uid -> { tokens, last }
   let nextId = 1;
@@ -34,12 +34,15 @@ module.exports = function createChat({ io, socketByUser, meByUser, groupMembers,
       const muted = moderation.muteOf(uid);
       if (muted) return error('🔇 Você está silenciado ' + moderation.describe(muted));
       if (!allow(uid)) return error('Devagar! Você está enviando mensagens rápido demais.');
-      const base = { id: nextId++, from: me.username, fromId: uid, text, ts: Date.now(), admin: me.role === 'admin' };
+      const base = { id: nextId++, from: me.username, fromId: uid, text, ts: Date.now(), admin: me.role === 'admin', tag: me.clan?.tag || null };
 
       if (p.ch === 'group') {
         const members = groupMembers(uid);
         if (!members.length) return error('Você não está em um grupo.');
         members.forEach((id) => socketByUser.get(id)?.emit('chat:msg', { ...base, ch: 'group' }));
+      } else if (p.ch === 'clan') {
+        if (!me.clan) return error('Você não está em um clã.');
+        clanMembers(me.clan.id).forEach((id) => socketByUser.get(id)?.emit('chat:msg', { ...base, ch: 'clan' }));
       } else if (p.ch === 'w') {
         const to = String(p.to || '').trim().toLowerCase();
         const target = [...meByUser.values()].find((m) => m.username.toLowerCase() === to);

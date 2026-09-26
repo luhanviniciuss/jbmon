@@ -13,6 +13,8 @@ const { pickSpecies, makeWild, resolveTurn, mineView, wildView, teamView } = req
 const createRaidSystem = require('./raid.js');
 const createChat = require('./chat.js');
 const createModeration = require('./moderation.js');
+const createClans = require('./clan.js');
+const createPvp = require('./pvp.js');
 const registerAdmin = require('./admin.js');
 const { retry, durable, flushPending, pendingCount } = require('./durable.js');
 const { loadTeam, nextFreeSlot, partyOf } = require('./team.js');
@@ -316,7 +318,14 @@ registerAdmin({
   world: { wilds, spawnAdminWild, clearAdminWilds, isWalkable: (tx, ty) => { const t = MAP[ty]?.[tx]; return t !== undefined && t !== 2 && t !== 3; } },
 });
 
-const chat = createChat({ io, socketByUser, meByUser, groupMembers: raidSys.groupMembers, moderation });
+const clans = createClans({ app, prisma, auth, io, socketByUser, meByUser });
+const pvp = createPvp({
+  app, prisma, auth, io, socketByUser, meByUser, loadTeam, durable, markCombat,
+  groupInfo: raidSys.groupInfo, clanSync: clans.refreshClan,
+  isBusy: (uid) => battlingUsers.has(uid) || raidSys.inRaid(uid),
+  setBusy: (uid, v) => (v ? battlingUsers.add(uid) : battlingUsers.delete(uid)),
+});
+const chat = createChat({ io, socketByUser, meByUser, groupMembers: raidSys.groupMembers, clanMembers: clans.clanMembersOnline, moderation });
 
 io.use(async (socket, next) => {
   try {
@@ -326,6 +335,7 @@ io.use(async (socket, next) => {
     const ban = moderation.banOf(user.id);
     if (ban) return next(new Error('Conta banida ' + moderation.describe(ban)));
     socket.data.user = user;
+    socket.data.clan = user.clan_id ? await prisma.clan.findUnique({ where: { id: user.clan_id }, select: { id: true, tag: true, name: true } }) : null;
     next();
   } catch {
     next(new Error('Não autenticado'));
@@ -338,12 +348,13 @@ io.on('connection', (socket) => {
   // Evita sessão duplicada da mesma conta
   for (const [sid, p] of players) if (p.id === u.id) io.sockets.sockets.get(sid)?.disconnect(true);
 
-  const me = { id: u.id, username: u.username, x: u.x, y: u.y, dir: 'down', combat: null, role: u.role };
+  const me = { id: u.id, username: u.username, x: u.x, y: u.y, dir: 'down', combat: null, role: u.role, clan: socket.data.clan ? { ...socket.data.clan, role: u.clan_role } : null };
   players.set(socket.id, me);
   socketByUser.set(u.id, socket);
   meByUser.set(u.id, me);
   raidSys.bind(socket, u.id);
   chat.bind(socket, u.id);
+  pvp.bind(socket, u.id);
 
   socket.emit('players:init', {
     self: me,
@@ -473,7 +484,7 @@ io.on('connection', (socket) => {
     budget = Math.min(BUDGET_CAP, budget + ((now - last) / 1000) * MAX_SPEED);
     last = now;
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-    if (battle || starting || raidSys.inRaid(u.id)) return socket.emit('player:correct', { x: me.x, y: me.y }); // parado em batalha
+    if (battle || starting || raidSys.inRaid(u.id) || pvp.inMatch(u.id)) return socket.emit('player:correct', { x: me.x, y: me.y }); // parado em batalha
 
     const dist = Math.hypot(x - me.x, y - me.y);
     if (dist > budget || isBlocked(x, y)) {
@@ -507,6 +518,7 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', async () => {
     raidSys.onDisconnect(u.id);
+    pvp.onDisconnect(u.id);
     if (battle) releaseWild(battle.world);
     if (socketByUser.get(u.id) === socket) { socketByUser.delete(u.id); meByUser.delete(u.id); }
     setBusy(false);

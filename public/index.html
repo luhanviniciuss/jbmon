@@ -42,6 +42,7 @@
       <button class="fab glass" id="partyBtn" aria-label="Abrir equipe"><span class="ic"><span class="ball sm"></span></span><span class="lbl">Party</span><kbd>P</kbd></button>
       <button class="fab glass" id="bagBtn" aria-label="Abrir bolsa"><span class="ic">🎒</span><span class="lbl">Bolsa</span><kbd>B</kbd></button>
       <button class="fab glass" id="groupBtn" aria-label="Abrir grupo"><span class="ic">👥</span><span class="lbl">Grupo</span><kbd>G</kbd></button>
+      <button class="fab glass" id="arenaBtn" aria-label="Arena: clã e PvP"><span class="ic">⚔</span><span class="lbl">Arena</span><kbd>K</kbd></button>
       <button class="fab glass" id="adminBtn" hidden aria-label="Painel de administração"><span class="ic">🛡</span><span class="lbl">Admin</span></button>
       <button class="fab glass" id="chatBtn" aria-label="Abrir chat"><span class="ic">💬</span><span class="lbl">Chat</span><kbd>Enter</kbd><i class="badge" id="chatBadge" hidden>0</i></button>
     </div>
@@ -73,6 +74,18 @@
     <span id="inviteTxt"></span>
     <button class="btn small" id="invYes">Aceitar</button>
     <button class="btn small ghost" id="invNo">Recusar</button>
+  </div>
+
+  <!-- Arena: clã, desafios PvP e ranking -->
+  <aside id="arena" class="drawer glass" aria-hidden="true">
+    <header><h2>⚔ Arena</h2><button class="close" id="closeArena" aria-label="Fechar">✕</button></header>
+    <nav class="atabs" id="arenaTabs"><button data-tab="fight" class="active">Desafiar</button><button data-tab="clan">Clã</button><button data-tab="rank">Ranking</button></nav>
+    <div id="arenaBody" class="list"></div>
+  </aside>
+  <div id="pvpInvite" class="invite glass" hidden>
+    <span id="pvpInvTxt"></span>
+    <button class="btn small" id="pvpYes">Aceitar</button>
+    <button class="btn small ghost" id="pvpNo">Recusar</button>
   </div>
 
   <!-- Painel de administração (só para contas admin) -->
@@ -118,19 +131,48 @@
     </div>
   </div>
 
+  <!-- Batalha PvP -->
+  <div id="pvpBattle" class="battle pvp" hidden>
+    <div class="b-field">
+      <div class="pv-top"><span id="pvLabel"></span><span id="pvTimer"></span></div>
+      <div class="b-card foe glass"><div class="b-name"><b id="pvFoeName"></b><span class="lv" id="pvFoeLv"></span></div><div class="hpbar"><i id="pvFoeHp"></i></div><div class="pv-row"><span id="pvFoeTypes"></span><span class="pips" id="pvFoePips"></span></div></div>
+      <div id="pvDuels" class="pv-duels" hidden></div>
+      <div class="platform foe-plat"></div><img id="pvFoe" class="b-sprite foe-sprite" alt="" />
+      <div class="platform my-plat"></div><img id="pvMy" class="b-sprite my-sprite" alt="" />
+      <div class="b-card mine glass"><div class="b-name"><b id="pvMyName"></b><span class="lv" id="pvMyLv"></span></div><div class="hpbar"><i id="pvMyHp"></i></div><div class="hp-txt" id="pvMyHpTxt"></div><div class="pv-row"><span id="pvMyTypes"></span><span class="pips" id="pvMyPips"></span></div></div>
+    </div>
+    <div class="b-panel glass">
+      <p id="pvMsg" class="pv-msg"></p>
+      <div id="pvResult" class="pvres" hidden></div>
+      <div class="b-actions" id="pvActions">
+        <button class="act a1" data-act="attack">Investida<small>1</small></button>
+        <button class="act a2" data-act="strong">Golpe Forte<small>2</small></button>
+        <button class="act a5" data-act="switch">⇄ Trocar<small>3</small></button>
+        <button class="act a4" data-act="forfeit">Desistir</button>
+      </div>
+      <div class="switchpicker" id="pvSwitch" hidden>
+        <div class="sw-title" id="pvSwTitle">Trocar de Pokémon</div>
+        <div class="sw-list" id="pvSwList"></div>
+        <button class="act a4 wide" id="pvSwBack">Voltar</button>
+      </div>
+      <button class="btn primary" id="pvContinue" hidden>Continuar</button>
+    </div>
+  </div>
+
   <!-- Chat -->
   <section id="chat" class="glass" hidden aria-label="Chat">
     <header>
       <div class="ctabs">
         <button class="ctab active" data-ch="global" type="button">Global<i class="udot" hidden></i></button>
         <button class="ctab" data-ch="group" type="button" hidden>Grupo<i class="udot" hidden></i></button>
+        <button class="ctab" data-ch="clan" type="button" hidden>Clã<i class="udot" hidden></i></button>
       </div>
       <button class="cbtn" id="chatMin" type="button" aria-label="Recolher chat">▾</button>
       <button class="cbtn cclose" id="chatClose" type="button" aria-label="Fechar chat">✕</button>
     </header>
     <div id="chatLog" class="chat-log" role="log" aria-live="polite"></div>
     <form id="chatForm" class="chat-form" autocomplete="off">
-      <input id="chatInput" maxlength="200" placeholder="Mensagem  ·  /w nome  ·  /g grupo" enterkeyhint="send" autocomplete="off" autocapitalize="sentences" />
+      <input id="chatInput" maxlength="200" placeholder="Mensagem  ·  /w nome  ·  /g grupo  ·  /c clã" enterkeyhint="send" autocomplete="off" autocapitalize="sentences" />
       <button class="btn small" type="submit">Enviar</button>
     </form>
   </section>
@@ -145,6 +187,7 @@
   <script src="/items.js"></script>
   <script src="/game.js"></script>
   <script src="/battle.js"></script>
+  <script src="/arena.js"></script>
   <script src="/admin.js"></script>
 </body>
 </html>

@@ -119,7 +119,7 @@ const Dex = (() => {
   $('dexBtn').addEventListener('click', () => open());
   $('closeDex').addEventListener('click', () => open(false));
   window.addEventListener('keydown', (e) => {
-    if (document.activeElement?.tagName === 'INPUT' || !token || inBattle) return;
+    if (isTyping() || !token || inBattle) return;
     if (e.key.toLowerCase() === 'o') open();
     if (e.key === 'Escape' && isOpen()) open(false);
   });

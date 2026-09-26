@@ -139,7 +139,7 @@ class GymScene extends Phaser.Scene {
   // ---------------------------------------------------------------- loop
   update(time, delta) {
     if (!this.player || this.leaving || this.traveling) return;
-    const k = this.keys, typing = document.activeElement?.tagName === 'INPUT';
+    const k = this.keys, typing = isTyping();
     let vx = typing ? 0 : (k.D.isDown || k.RIGHT.isDown ? 1 : 0) - (k.A.isDown || k.LEFT.isDown ? 1 : 0);
     let vy = typing ? 0 : (k.S.isDown || k.DOWN.isDown ? 1 : 0) - (k.W.isDown || k.UP.isDown ? 1 : 0);
     if (vx || vy) this.target = null;

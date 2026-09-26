@@ -2,6 +2,8 @@ const $ = (id) => document.getElementById(id);
 let token = null;
 let mode = 'login';
 let inBattle = false;
+// Digitando em qualquer campo (chat, painel admin, buscas)? Atalhos e movimento por teclado ficam desligados.
+function isTyping() { const a = document.activeElement; return !!a && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable); }
 let WORLD_ID = 'route'; // mundo atual: route | town | ice | lava
 let MY_ID = null;
 let IS_ADMIN = false; // vem do servidor no login; o servidor confere de novo a cada ação do painel
@@ -259,7 +261,7 @@ $('bossChip').addEventListener('click', () => { if (BOSS) window.worldScene?.wal
 $('closeBag').addEventListener('click', () => openBag(false));
 $('closeParty').addEventListener('click', () => openParty(false));
 window.addEventListener('keydown', (e) => {
-  if (!token || inBattle || document.activeElement.tagName === 'INPUT') return;
+  if (!token || inBattle || isTyping()) return;
   if (e.key === 'Enter') { e.preventDefault(); openChat(true, true); return; }
   if (e.key.toLowerCase() === 'p') openParty();
   if (e.key.toLowerCase() === 'b') openBag();
@@ -381,8 +383,9 @@ function initChat() {
   document.querySelectorAll('.ctab').forEach((b) => b.addEventListener('click', () => setChatTab(b.dataset.ch)));
   $('chatInput').addEventListener('keydown', (e) => { if (e.key === 'Escape') openChat(false); });
   // Digitar no chat não pode mover o personagem (WASD/setas ficam desligados no Phaser enquanto o campo está ativo)
-  $('chatInput').addEventListener('focus', () => { const k = window.worldScene?.input.keyboard; if (k) { k.enabled = false; k.resetKeys(); } });
-  $('chatInput').addEventListener('blur', () => { const k = window.worldScene?.input.keyboard; if (k) k.enabled = true; });
+  // Foco em qualquer campo de texto: o Phaser para de ouvir o teclado (WASD/setas/E), senão as letras andam o personagem
+  document.addEventListener('focusin', () => { if (isTyping()) { const k = window.worldScene?.input.keyboard; if (k) { k.enabled = false; k.resetKeys(); } } });
+  document.addEventListener('focusout', () => setTimeout(() => { if (!isTyping()) { const k = window.worldScene?.input.keyboard; if (k) k.enabled = true; } }, 0));
   $('chatForm').addEventListener('submit', (e) => {
     e.preventDefault();
     const raw = $('chatInput').value.trim();

@@ -351,7 +351,7 @@ const Battle = (() => {
   $('swBack').addEventListener('click', () => showPanel('actions'));
   $('bContinue').addEventListener('click', close);
   window.addEventListener('keydown', (e) => {
-    if (!active || document.activeElement?.tagName === 'INPUT') return;
+    if (!active || isTyping()) return;
     if (!$('bContinue').hidden) { if (e.key === 'Enter' || e.key === ' ') close(); return; }
     if (switchOpen()) { // teclas 1-6 escolhem o Pokémon; Esc volta (exceto quando a escolha é obrigatória)
       if ((e.key === 'Escape' || e.key === 'Backspace') && !$('swBack').hidden) showPanel('actions');

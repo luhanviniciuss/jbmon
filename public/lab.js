@@ -284,7 +284,7 @@ class LabScene extends Phaser.Scene {
   // ---------------------------------------------------------------- loop
   update(time, delta) {
     if (!this.player || this.leaving) return;
-    const k = this.keys, typing = document.activeElement?.tagName === 'INPUT';
+    const k = this.keys, typing = isTyping();
     if (this.healing || this.waiting) {
       this.target = null;
     } else {

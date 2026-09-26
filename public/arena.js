@@ -394,7 +394,7 @@ const Arena = (() => {
   $('pvSwBack').addEventListener('click', showActions);
   $('pvContinue').addEventListener('click', closeBattle);
   window.addEventListener('keydown', (e) => {
-    if (document.activeElement?.tagName === 'INPUT') return;
+    if (isTyping()) return;
     if (!$('pvpBattle').hidden) {
       if (!$('pvContinue').hidden) { if (e.key === 'Enter' || e.key === ' ') closeBattle(); return; }
       if (!$('pvSwitch').hidden) { if (/^[1-3]$/.test(e.key) && m?.you.team[e.key - 1]) act('switch:' + (e.key - 1)); return; }

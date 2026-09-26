@@ -7,7 +7,7 @@ const CLEAR_MIN = 46, CLEAR_MAX = 54; // clareira central da Rota = Centro Poké
 
 // Prédios 5x3 tiles: sólidos, exceto a porta (pisar nela entra no interior).
 const LAB = { x0: 48, x1: 52, y0: 45, y1: 47, doorX: 50, doorY: 47 };        // Centro Pokémon da Rota
-const GYM = { x0: 57, x1: 61, y0: 45, y1: 47, doorX: 59, doorY: 47 };        // Ginásio: hub de portais para os outros mundos
+const GYM = { x0: 68, x1: 72, y0: 45, y1: 47, doorX: 70, doorY: 47 };        // Ginásio: hub de portais (20 tiles a leste do Centro Pokémon)
 const TOWN_LAB = { x0: 48, x1: 52, y0: 40, y1: 42, doorX: 50, doorY: 42 };   // Centro Pokémon da Cidade
 const LABS = { route: LAB, town: TOWN_LAB };
 const PORTAL = { tx: 46, ty: 49 };                                            // portal de volta ao ginásio (mundos extras), 4 tiles a oeste da chegada
@@ -55,6 +55,7 @@ function genRoute() {
     return t;
   });
   for (let y = GYM.y0 - 1; y <= GYM.y1 + 3; y++) for (let x = GYM.x0 - 1; x <= GYM.x1 + 1; x++) data[y][x] = 0; // terreno limpo ao redor do ginásio
+  for (let y = GYM.doorY + 1; y <= GYM.doorY + 3; y++) for (let x = CLEAR_MAX + 1; x < GYM.x0; x++) data[y][x] = 0; // caminho livre de grama alta entre o Centro Pokémon e o ginásio
   stamp(data, LAB);
   stamp(data, GYM);
   return data;

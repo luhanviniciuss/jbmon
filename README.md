@@ -94,7 +94,7 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 - **Selo ADM** no chat e nomes reservados (`admin`, `moderador`, `gm`, `sistema`…) que jogadores comuns não conseguem registrar.
 
 ## Ginásio e mundos extras
-- **Ginásio** (Rota, a leste do Centro Pokémon): pisar na porta leva ao **salão do ginásio** (`GymScene`, `public/gym.js`), com três **portais**: **Cidade**, **Bioma de Gelo** e **Vulcão**. Caminhe até um portal para viajar; a porta verde de baixo volta à Rota.
+- **Ginásio** (Rota, 20 tiles a leste do Centro Pokémon, por uma estrada livre de grama alta): pisar na porta leva ao **salão do ginásio** (`GymScene`, `public/gym.js`), com três **portais**: **Cidade**, **Bioma de Gelo** e **Vulcão**. Caminhe até um portal para viajar; a porta verde de baixo volta à Rota.
 - **Mundos** (cada um com 100x100 tiles, gerados por `generateMap(mundo)` em `public/map.js`, iguais no servidor e no cliente):
   - **Cidade**: pavimento de pedra, praça com fonte, casas coloridas e um **Centro Pokémon próprio** (laboratório de cura de 15 s). Segura: sem Pokémon selvagens.
   - **Bioma de Gelo**: chão de neve, gelo liso, blocos de gelo, lago congelado e neve funda (encontros); neve caindo e tom frio. Selvagens de **Gelo/Água** (Smoochum, Sneasel, Jynx, Seel, Dewgong, Shellder, Cloyster, Lapras… e lendários Articuno/Regice), **Lv. 80 a 200**.

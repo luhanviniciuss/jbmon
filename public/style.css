@@ -603,3 +603,16 @@ textarea.af { resize: vertical; }
 .act.legend:disabled { animation: none; box-shadow: none; filter: grayscale(.5); }
 .act.legend[hidden] { display: none; }
 @keyframes legendGlow { 50% { box-shadow: 0 0 0 3px rgba(255, 230, 120, .9), 0 0 28px rgba(255, 190, 40, .8); } }
+
+/* Fila de PvP */
+.queue-chip { border: 1px solid var(--line); color: var(--text); font: 700 13px var(--font); cursor: pointer; pointer-events: auto; padding: 8px 14px; min-height: 40px; animation: pulseQ 1.6s ease-in-out infinite; }
+.queue-chip[hidden] { display: none; }
+@keyframes pulseQ { 50% { box-shadow: 0 0 0 3px rgba(77, 163, 255, .5); } }
+.qbox { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 18px 12px; border-radius: 16px; background: rgba(77, 163, 255, .12); border: 1px solid rgba(77, 163, 255, .45); text-align: center; }
+.qbox strong { font-size: 30px; font-variant-numeric: tabular-nums; }
+.qbox small { color: var(--muted); font-size: 12px; }
+.qspin { font-size: 30px; animation: qspin 1.4s linear infinite; display: inline-block; }
+@keyframes qspin { to { transform: rotate(360deg); } }
+.qinfo { font-size: 13px; color: var(--muted); }
+.qinfo span { font-weight: 800; color: var(--text); font-size: 16px; }
+#qJoin, #qCancel { width: 100%; min-height: 48px; }

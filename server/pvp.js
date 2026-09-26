@@ -17,6 +17,8 @@ const MODES = ['solo', 'group', 'clan'];
 const CLAN_WIN = 30;
 const CLAN_LOSS = 10;
 const RANK = { member: 1, officer: 2, leader: 3 };
+const QUEUE_MAX_MS = 10 * 60000; // sem adversário depois disso, a fila é cancelada
+const QUEUE_TICK_MS = 1500;
 
 module.exports = function createPvp({ biomeOf, app, prisma, auth, io, socketByUser, meByUser, groupInfo, isBusy, setBusy, markCombat, loadTeam, durable, clanSync }) {
   const inMatch = new Map(); // uid -> match
@@ -94,6 +96,89 @@ module.exports = function createPvp({ biomeOf, app, prisma, auth, io, socketByUs
     const [A, B] = buildSides(ch.from, ch.to, ch.mode);
     await startMatch(ch.mode, A, B);
   }
+
+  // ------------------------------------------------------------ fila (matchmaking)
+  // Entra na fila: 1 jogador (solo), um grupo inteiro (líder) ou um grupo/jogador do clã (líder/oficial, guerra de clãs).
+  // A cada tick o servidor junta quem tem o MESMO tamanho e rating parecido; a tolerância cresce com o tempo de espera.
+  const queues = { solo: [], group: [], clan: [] };
+  const queueOf = (uid) => { for (const m of MODES) { const e = queues[m].find((x) => x.members.includes(uid)); if (e) return e; } return null; };
+
+  async function joinQueue(uid, mode) {
+    if (!MODES.includes(mode)) fail('Modo inválido');
+    if (queueOf(uid)) fail('Você já está na fila.');
+    if (inMatch.has(uid) || isBusy(uid)) fail('Termine o que está fazendo (batalha, raid ou interior) antes de entrar na fila.');
+    const a = meByUser.get(uid);
+    if (!a) fail('Você não está mais online');
+    const members = sideFor(uid, mode, 'Você'); // valida o grupo (só o líder enfileira o grupo inteiro)
+    for (const id of members) {
+      if (queueOf(id)) fail(nameById(id) + ' já está na fila.');
+      if (inMatch.has(id) || isBusy(id)) fail(nameById(id) + ' está ocupado(a) em outra batalha.');
+    }
+    if (mode === 'clan') {
+      if (!a.clan) fail('Guerra de clãs: você precisa ter um clã.');
+      if (RANK[a.clan.role] < RANK.officer) fail('Só líder e oficiais colocam o clã na fila de guerra.');
+      if (members.some((id) => meByUser.get(id)?.clan?.id !== a.clan.id)) fail('Todos do seu grupo precisam ser do seu clã.');
+    }
+    const rows = await prisma.user.findMany({ where: { id: { in: members } }, select: { pvp_rating: true } });
+    const rating = rows.reduce((t, r) => t + r.pvp_rating, 0) / Math.max(1, rows.length);
+    const entry = { id: nextId++, mode, leader: uid, members, size: members.length, since: Date.now(), rating, clanId: mode === 'clan' ? a.clan.id : null };
+    queues[mode].push(entry);
+    members.forEach((id) => emit(id, 'pvp:queued', { mode, size: entry.size, since: entry.since, by: a.username }));
+    matchTick();
+  }
+
+  function leaveQueue(uid, reason) {
+    const e = queueOf(uid);
+    if (!e) return false;
+    queues[e.mode].splice(queues[e.mode].indexOf(e), 1);
+    e.members.forEach((id) => emit(id, 'pvp:queue-left', { reason: reason || 'cancel' }));
+    return true;
+  }
+
+  const queueWindow = (e) => 100 + ((Date.now() - e.since) / 1000) * 40; // diferença de rating aceita (cresce com a espera)
+  let ticking = false;
+  async function matchTick() {
+    if (ticking) return;
+    ticking = true;
+    try {
+      for (const mode of MODES) {
+        const q = queues[mode];
+        for (const e of [...q]) { // limpeza: tempo esgotado ou alguém saiu do jogo
+          if (Date.now() - e.since > QUEUE_MAX_MS) { q.splice(q.indexOf(e), 1); e.members.forEach((id) => { emit(id, 'pvp:queue-left', { reason: 'Ninguém encontrado a tempo. Tente de novo.' }); }); }
+          else if (e.members.some((id) => !meByUser.has(id))) { q.splice(q.indexOf(e), 1); e.members.forEach((id) => emit(id, 'pvp:queue-left', { reason: 'Alguém saiu do jogo: a fila foi cancelada.' })); }
+        }
+        const ready = (e) => e.members.every((id) => !isBusy(id) && !inMatch.has(id));
+        let pair = null;
+        for (let i = 0; i < q.length && !pair; i++) {
+          const a = q[i];
+          if (!ready(a)) continue;
+          let best = null, bd = Infinity;
+          for (let j = i + 1; j < q.length; j++) {
+            const b = q[j];
+            if (!ready(b) || b.size !== a.size || a.members.some((id) => b.members.includes(id)) || (mode === 'clan' && b.clanId === a.clanId)) continue;
+            const d = Math.abs(a.rating - b.rating);
+            if (d <= Math.max(queueWindow(a), queueWindow(b)) && d < bd) { best = b; bd = d; }
+          }
+          if (best) pair = [a, best];
+        }
+        if (!pair) continue;
+        const [a, b] = pair;
+        q.splice(q.indexOf(a), 1);
+        q.splice(q.indexOf(b), 1);
+        try {
+          const [A, B] = buildSides(a.leader, b.leader, mode);
+          [...a.members, ...b.members].forEach((id) => emit(id, 'pvp:queue-left', { reason: 'match' }));
+          await startMatch(mode, A, B);
+        } catch (err) {
+          [...a.members, ...b.members].forEach((id) => { emit(id, 'pvp:queue-left', { reason: 'Não foi possível formar a partida (' + err.message + '). Entre na fila de novo.' }); });
+        }
+        break; // um pareamento por tick e por modo: o próximo tick continua
+      }
+    } finally {
+      ticking = false;
+    }
+  }
+  setInterval(() => matchTick().catch((e) => console.error('[pvp] fila', e.message)), QUEUE_TICK_MS).unref();
 
   // ------------------------------------------------------------ partida
   async function makePlayer(uid) {
@@ -332,6 +417,8 @@ module.exports = function createPvp({ biomeOf, app, prisma, auth, io, socketByUs
     const guard = (fn) => async (p) => { try { await fn(p); } catch (e) { notice(uid, e.message.startsWith('Não foi') ? e.message : e.message); } };
     socket.on('pvp:challenge', guard((p) => challenge(uid, p || {})));
     socket.on('pvp:respond', guard((p) => respond(uid, p || {})));
+    socket.on('pvp:queue', guard((p) => joinQueue(uid, (p || {}).mode)));
+    socket.on('pvp:unqueue', () => leaveQueue(uid, 'cancel'));
     socket.on('pvp:action', (p) => choose(uid, p || {}));
     socket.on('pvp:forfeit', () => forfeit(uid));
     socket.on('pvp:cancel', () => {
@@ -340,6 +427,7 @@ module.exports = function createPvp({ biomeOf, app, prisma, auth, io, socketByUs
   }
 
   function onDisconnect(uid) {
+    leaveQueue(uid, 'Alguém saiu do jogo: a fila foi cancelada.');
     forfeit(uid);
     challenges.delete(uid);
     for (const [to, c] of challenges) if (c.from === uid) { challenges.delete(to); emit(to, 'pvp:challenge-gone', { id: c.id }); }
@@ -366,6 +454,12 @@ module.exports = function createPvp({ biomeOf, app, prisma, auth, io, socketByUs
       const rating = new Map(rows.map((r) => [r.id, r.pvp_rating]));
       res.json(others.map((m) => ({ username: m.username, tag: m.clan?.tag || null, busy: isBusy(m.id) || inMatch.has(m.id), group: groupInfo(m.id)?.members.length || 0, rating: rating.get(m.id) ?? 1000 })));
     } catch (e) { console.error('[pvp] online', e); res.status(500).json({ error: 'Erro interno' }); }
+  });
+
+  // Situação da fila: quantos esperando por modo e a minha entrada
+  app.get('/api/pvp/queue', auth, (req, res) => {
+    const mine = queueOf(req.user.id);
+    res.json({ counts: { solo: queues.solo.length, group: queues.group.length, clan: queues.clan.length }, mine: mine ? { mode: mine.mode, since: mine.since, size: mine.size } : null });
   });
 
   return { bind, onDisconnect, inMatch: (uid) => inMatch.has(uid) };

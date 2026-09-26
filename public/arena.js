@@ -19,6 +19,7 @@ const Arena = (() => {
   let locked = true;
   let queue = Promise.resolve();
   let deadlineTimer = null;
+  let queued = null; // { mode, since, size } enquanto estou na fila de PvP
 
   const api = async (path, body) => {
     const r = await fetch('/api' + path, { method: body ? 'POST' : 'GET', headers: { Authorization: 'Bearer ' + token, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
@@ -50,24 +51,46 @@ const Arena = (() => {
     return renderRank(body);
   }
 
-  // ---- Desafiar
-  async function renderFight(body) {
-    body.innerHTML =
-      '<div class="modes">' + Object.entries(MODE_INFO).map(([k, [t]]) => '<button data-mode="' + k + '" class="' + (k === mode ? 'active' : '') + '">' + t + '</button>').join('') + '</div>' +
-      '<p class="hintline">' + MODE_INFO[mode][1] + ' Todos lutam no <b>Lv.50</b> com até 3 Pokémon da sua equipe: <b>ninguém perde nada</b>. Vale ranking.</p>' +
-      '<div class="section-title">Jogadores online</div><div id="arenaOnline" class="plist"><p class="empty">Carregando…</p></div>';
-    body.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => { mode = b.dataset.mode; renderFight(body); }));
-    let list = [];
-    try { list = await api('/pvp/online'); } catch (e) { return say(e); }
+  // ---- Fila PvP (matchmaking). Desafiar um jogador específico é tocando nele no mapa.
+  const fmtWait = (ms) => { const t = Math.max(0, Math.floor(ms / 1000)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
+  const QUEUE_NAME = { solo: 'Solo 1x1', group: 'Grupo', clan: 'Guerra de clãs' };
+  const QUEUE_NEED = {
+    solo: 'Sem requisitos: o servidor procura alguém com rating parecido.',
+    group: 'Você precisa ser o <b>líder de um grupo</b> (2 a 4). O grupo inteiro entra na fila e enfrenta outro grupo do <b>mesmo tamanho</b>.',
+    clan: 'Para <b>líder ou oficial</b> de clã. Entra sozinho (1x1) ou com um grupo só de membros do clã, contra outro clã do mesmo tamanho. Vale pontos para o clã.',
+  };
+  async function renderQueue(body) {
+    let info = { counts: { solo: 0, group: 0, clan: 0 }, mine: null };
+    try { info = await api('/pvp/queue'); } catch (e) { return say(e); }
     if (tab !== 'fight') return;
-    const box = $('arenaOnline');
-    if (!box) return;
-    box.innerHTML = list.length ? list.map((p) =>
-      '<div class="item pl"><span class="avatar sm">' + esc(p.username[0]) + '</span><div><b>' + (p.tag ? '<span class="ctag">[' + esc(p.tag) + ']</span> ' : '') + esc(p.username) + '</b>' +
-      '<small>' + (p.busy ? 'Ocupado' : p.group ? 'Em grupo (' + p.group + ')' : 'Livre') + ' · ⭐ ' + p.rating + '</small></div>' +
-      '<button class="btn small" data-t="' + esc(p.username) + '"' + (p.busy ? ' disabled' : '') + '>Desafiar</button></div>').join('') : '<p class="empty">Ninguém mais online agora.</p>';
-    box.querySelectorAll('[data-t]').forEach((b) => b.addEventListener('click', () => socket.emit('pvp:challenge', { mode, target: b.dataset.t })));
+    queued = info.mine;
+    updateQueueChip();
+    const mine = queued;
+    body.innerHTML =
+      '<div class="modes">' + Object.entries(MODE_INFO).map(([k, [t]]) => '<button data-mode="' + k + '" class="' + (k === mode ? 'active' : '') + '"' + (mine ? ' disabled' : '') + '>' + t + '</button>').join('') + '</div>' +
+      (mine
+        ? '<div class="qbox"><div class="qspin">🔎</div><b>Procurando adversário…</b><span>' + esc(QUEUE_NAME[mine.mode]) + (mine.size > 1 ? ' · ' + mine.size + 'x' + mine.size : '') + '</span><strong id="qTime">' + fmtWait(Date.now() - mine.since) + '</strong><small>' + info.counts[mine.mode] + ' na fila agora · a busca aceita rating mais distante quanto mais você espera</small></div>' +
+          '<button class="btn danger" id="qCancel">Sair da fila</button>'
+        : '<p class="hintline">' + QUEUE_NEED[mode] + ' Todos lutam no <b>Lv.50</b> com até 3 Pokémon da equipe: <b>ninguém perde nada</b>. Vale ranking.</p>' +
+          '<div class="qinfo"><span>' + info.counts[mode] + '</span> na fila de ' + esc(QUEUE_NAME[mode]) + ' agora</div>' +
+          '<button class="btn primary" id="qJoin">🔎 Entrar na fila</button>') +
+      '<p class="hintline">Quer desafiar um jogador específico? <b>Toque nele no mapa</b> e escolha o desafio.</p>';
+    body.querySelectorAll('[data-mode]').forEach((bt) => bt.addEventListener('click', () => { mode = bt.dataset.mode; renderQueue(body); }));
+    $('qJoin')?.addEventListener('click', () => { $('qJoin').disabled = true; socket.emit('pvp:queue', { mode }); setTimeout(() => render(), 600); });
+    $('qCancel')?.addEventListener('click', () => { socket.emit('pvp:unqueue'); });
   }
+  const renderFight = renderQueue;
+
+  function updateQueueChip() {
+    const c = $('queueChip');
+    c.hidden = !queued;
+    if (queued) c.textContent = '🔎 Fila ' + fmtWait(Date.now() - queued.since);
+  }
+  setInterval(() => {
+    updateQueueChip();
+    const t = $('qTime');
+    if (t && queued) t.textContent = fmtWait(Date.now() - queued.since);
+  }, 1000);
 
   // ---- Clã
   async function renderClan(body) {
@@ -233,6 +256,7 @@ const Arena = (() => {
   async function onState(s) {
     const first = !m || m.match !== s.match;
     if (first) {
+      queued = null; updateQueueChip();
       inBattle = true;
       chatBattle(true);
       window.worldScene?.player?.setVelocity(0, 0);
@@ -346,6 +370,8 @@ const Arena = (() => {
     socket = s;
     s.on('pvp:challenged', showChallenge);
     s.on('pvp:challenge-gone', hideChallenge);
+    s.on('pvp:queued', (d) => { queued = { mode: d.mode, since: d.since, size: d.size }; updateQueueChip(); toast('🔎 Na fila de PvP (' + QUEUE_NAME[d.mode] + ')'); if (isOpen() && tab === 'fight') render(); });
+    s.on('pvp:queue-left', ({ reason }) => { queued = null; updateQueueChip(); if (reason && reason !== 'match' && reason !== 'cancel') toast(reason); if (reason === 'cancel') toast('Você saiu da fila.'); if (isOpen() && tab === 'fight') render(); });
     s.on('pvp:state', onState);
     s.on('pvp:end', onEnd);
     s.on('clan:update', () => { api('/clan/me').then((r) => { if (MY_CLAN && r.clan) MY_CLAN.role = r.role; }).catch(() => {}); if (isOpen() && tab === 'clan') render(); });
@@ -358,6 +384,7 @@ const Arena = (() => {
     });
   }
 
+  $('queueChip').addEventListener('click', () => { open(true); setTab('fight'); });
   $('arenaBtn').addEventListener('click', () => open());
   $('closeArena').addEventListener('click', () => open(false));
   document.querySelectorAll('#arenaTabs button').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));

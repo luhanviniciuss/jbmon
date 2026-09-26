@@ -487,3 +487,6 @@ textarea.af { resize: vertical; }
 .voipstat.on { color: var(--green); } .voipstat.wait { color: var(--gold); }
 .item.vm { grid-template-columns: 28px minmax(0, 1fr) auto; }
 .avatar.speaking { box-shadow: 0 0 0 3px var(--green), 0 0 12px var(--green); }
+
+/* dentro do laboratório do Centro Pokémon */
+.in-lab .hud-bottom { display: none; }

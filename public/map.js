@@ -3,6 +3,8 @@
 const MAP_W = 100, MAP_H = 100, TILE = 32;
 const PLAYER_SPEED = 160; // px/s (compartilhado com o servidor)
 const CLEAR_MIN = 46, CLEAR_MAX = 54; // clareira central = Centro Pokémon (cura)
+// Prédio do Centro Pokémon na clareira: tiles sólidos, exceto a porta (pisar nela leva ao laboratório)
+const LAB = { x0: 48, x1: 52, y0: 45, y1: 47, doorX: 50, doorY: 47 };
 
 function hash(x, y) {
   let h = (x * 374761393 + y * 668265263) | 0;
@@ -28,7 +30,8 @@ function generateMap() {
     }
     data.push(row);
   }
+  for (let y = LAB.y0; y <= LAB.y1; y++) for (let x = LAB.x0; x <= LAB.x1; x++) data[y][x] = x === LAB.doorX && y === LAB.doorY ? 0 : 3;
   return data;
 }
 
-if (typeof module !== "undefined") module.exports = { MAP_W, MAP_H, TILE, PLAYER_SPEED, CLEAR_MIN, CLEAR_MAX, generateMap };
+if (typeof module !== "undefined") module.exports = { MAP_W, MAP_H, TILE, PLAYER_SPEED, CLEAR_MIN, CLEAR_MAX, LAB, generateMap };

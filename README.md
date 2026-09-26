@@ -15,6 +15,7 @@ server/battle.js       Regras de batalha, tipos, dano, captura, EXP
 server/raid.js         Grupos, boss lendário a cada 3 h e raid cooperativa
 server/chat.js         Chat global, de grupo e sussurros
 server/clan.js         Clãs: criar, convidar, cargos, ranking (/api/clan/*)
+public/lab.js           Cena do laboratório de cura (LabScene)
 server/voip.js         Sinalização da voz do grupo (WebRTC)
 public/settings.js     Configurações e VoIP do grupo
 server/pvp.js          PvP solo, de grupo e guerra de clãs; rating (/api/pvp/*)
@@ -89,6 +90,12 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 - **Punições**: o ban impede login, uso da API e conexão do socket (mesmo com token antigo), expulsa o jogador na hora e **sobrevive a reinícios** (colunas `banned_until` / `muted_until`). Silenciados não conseguem falar em nenhum canal e recebem o motivo. Admins não podem ser banidos/silenciados por outros admins nem por si mesmos.
 - **Auditoria**: toda ação fica na tabela `AdminLog` (quem, o quê, alvo e detalhes).
 - **Selo ADM** no chat e nomes reservados (`admin`, `moderador`, `gm`, `sistema`…) que jogadores comuns não conseguem registrar.
+
+## Laboratório de cura (Centro Pokémon)
+- No meio do mapa há um **prédio** (Centro Pokémon, sólido) com a porta no tile central de baixo. Pisar na porta leva ao **laboratório** (cena `LabScene`, `public/lab.js`): sala metálica com piso em grade, tubulações e a **Máquina de Incubação** com 6 tubos de vidro (os Pokémon da equipe aparecem dentro; vermelhos = machucados). A porta verde de baixo devolve você ao mapa, em frente ao prédio.
+- **Cura**: toque no botão **CURAR EQUIPE** (ou na máquina, ou tecla **E** perto dela; longe, o avatar anda até lá). Dura **15 s**: os tubos enchem de líquido verde e brilham, o avatar fica parado e uma barra de progresso aparece acima da máquina. Ao terminar, **todos os Pokémon** voltam ao HP máximo, as Pokébolas são repostas até 10 e aparece "Pokémon curados!". Se a equipe já está saudável, o servidor avisa na hora e não gasta os 15 s.
+- **Autoridade do servidor**: o servidor confere que você está na porta para entrar, roda o temporizador de 15 s e só então grava a cura (sair antes cancela; desconectar também). Dentro do laboratório você fica oculto no mapa para os outros e não pode ser desafiado nem entrar em raid.
+- **A cura automática da clareira foi removida**: agora curar é pelo laboratório. Perder uma batalha selvagem continua curando e levando ao spawn.
 
 ## Clãs e PvP
 - **Onde**: botão ⚔ **Arena** (atalho K), com as abas **Desafiar**, **Clã** e **Ranking**. Funciona no celular (gaveta) e no PC.

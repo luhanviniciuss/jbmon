@@ -6,7 +6,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Server } = require('socket.io');
 const { PrismaClient } = require('@prisma/client');
-const { MAP_W, TILE, PLAYER_SPEED, CLEAR_MIN, CLEAR_MAX, generateMap } = require('../public/map.js');
+const { MAP_W, TILE, PLAYER_SPEED, CLEAR_MIN, CLEAR_MAX, LAB, generateMap } = require('../public/map.js');
 const { SPECIES, WILD_TABLE, WATER_TABLE, calcStats, minLevel } = require('../public/species.js');
 const { BALLS, RECIPES } = require('../public/items.js');
 const { pickSpecies, makeWild, resolveTurn, mineView, wildView, teamView } = require('./battle.js');
@@ -47,6 +47,7 @@ const RESPAWN_MS = 15000;
 const IMMUNE_MS = 4000; // após uma batalha, ninguém te puxa de novo
 const ACTIONS = ['attack', 'strong', 'run', ...Object.keys(BALLS).map((k) => 'ball:' + k)];
 const LEVEL_BONUS = { common: 0, uncommon: 1, rare: 2, epic: 4, legendary: 0 };
+const LAB_HEAL_MS = 15000; // tempo da cura no laboratório
 const HEAL_BALLS = 10; // o Centro Pokémon repõe até esta quantidade
 
 const prisma = new PrismaClient();
@@ -309,7 +310,7 @@ const teleportHome = (uid) => teleportTo(uid, SPAWN.x, SPAWN.y);
 const raidSys = createRaidSystem({
   io, prisma, MAP, socketByUser, meByUser, teleportHome,
   clearing: inClearing,
-  isBusy: (uid) => battlingUsers.has(uid),
+  isBusy: (uid) => battlingUsers.has(uid) || !!meByUser.get(uid)?.hidden,
   setBusy: (uid, v) => { v ? battlingUsers.add(uid) : battlingUsers.delete(uid); markCombat(uid, v ? 'raid' : null); }, // usado pela raid
 });
 
@@ -323,7 +324,7 @@ const clans = createClans({ app, prisma, auth, io, socketByUser, meByUser });
 const pvp = createPvp({
   app, prisma, auth, io, socketByUser, meByUser, loadTeam, durable, markCombat,
   groupInfo: raidSys.groupInfo, clanSync: clans.refreshClan,
-  isBusy: (uid) => battlingUsers.has(uid) || raidSys.inRaid(uid),
+  isBusy: (uid) => battlingUsers.has(uid) || raidSys.inRaid(uid) || !!meByUser.get(uid)?.hidden,
   setBusy: (uid, v) => (v ? battlingUsers.add(uid) : battlingUsers.delete(uid)),
 });
 const voip = createVoip({ socketByUser, groupInfo: raidSys.groupInfo });
@@ -350,7 +351,8 @@ io.on('connection', (socket) => {
   // Evita sessão duplicada da mesma conta
   for (const [sid, p] of players) if (p.id === u.id) io.sockets.sockets.get(sid)?.disconnect(true);
 
-  const me = { id: u.id, username: u.username, x: u.x, y: u.y, dir: 'down', combat: null, role: u.role, clan: socket.data.clan ? { ...socket.data.clan, role: u.clan_role } : null };
+  const me = { id: u.id, username: u.username, x: u.x, y: u.y, dir: 'down', combat: null, hidden: false, role: u.role, clan: socket.data.clan ? { ...socket.data.clan, role: u.clan_role } : null };
+  if (isBlocked(me.x, me.y)) { me.x = SPAWN.x; me.y = SPAWN.y; }
   players.set(socket.id, me);
   socketByUser.set(u.id, socket);
   meByUser.set(u.id, me);
@@ -376,7 +378,6 @@ io.on('connection', (socket) => {
   let acting = false;
   let lastTile = '';
   let immuneUntil = 0;
-  let lastHeal = 0;
 
   const persist = async (b, drops, capture) => {
     const slot = capture ? await nextFreeSlot(prisma, u.id) : null; // vaga na equipe ou box
@@ -420,25 +421,70 @@ io.on('connection', (socket) => {
     }
   }
 
-  async function healParty() {
-    if (battle || starting) return;
-    try {
-      const [all, usr] = await Promise.all([
-        prisma.pokemon.findMany({ where: { user_id: u.id } }),
-        prisma.user.findUnique({ where: { id: u.id } }),
-      ]);
-      const hurt = all.filter((p) => p.current_hp < p.hp);
-      if (!hurt.length && usr.pokeballs >= HEAL_BALLS) return;
-      const pokeballs = Math.max(usr.pokeballs, HEAL_BALLS);
-      await retry(() => prisma.$transaction([
-        ...hurt.map((p) => prisma.pokemon.update({ where: { id: p.id }, data: { current_hp: p.hp } })),
-        prisma.user.update({ where: { id: u.id }, data: { pokeballs } }),
-      ]));
-      socket.emit('party:healed', { balls: invOf({ ...usr, pokeballs }) });
-    } catch (e) {
-      console.error('Falha ao curar', e.message);
-    }
+  // ----- Laboratório do Centro Pokémon: entrar, curar (15 s) e sair. O servidor manda: confere que o jogador está
+  // dentro, roda o temporizador e só depois grava a cura. Enquanto está no laboratório o jogador fica oculto no mapa.
+  const doorC = { x: (LAB.doorX + 0.5) * TILE, y: (LAB.doorY + 0.5) * TILE };
+  const labExit = { x: doorC.x, y: (LAB.doorY + 1.5) * TILE }; // logo abaixo da porta
+  let labTimer = null;
+  let labBusy = false;
+
+  async function healNow() {
+    const [all, usr] = await Promise.all([
+      prisma.pokemon.findMany({ where: { user_id: u.id } }),
+      prisma.user.findUnique({ where: { id: u.id } }),
+    ]);
+    const hurt = all.filter((p) => p.current_hp < p.hp);
+    const pokeballs = Math.max(usr.pokeballs, HEAL_BALLS);
+    await durable('cura', () => prisma.$transaction([
+      ...hurt.map((p) => prisma.pokemon.update({ where: { id: p.id }, data: { current_hp: p.hp } })),
+      prisma.user.update({ where: { id: u.id }, data: { pokeballs } }),
+    ]));
+    return { healed: hurt.length, balls: invOf({ ...usr, pokeballs }) };
   }
+
+  socket.on('lab:enter', () => {
+    if (me.hidden || battle || starting || raidSys.inRaid(u.id) || pvp.inMatch(u.id)) return;
+    if (Math.hypot(me.x - doorC.x, me.y - doorC.y) > TILE * 1.3) return; // precisa estar na porta
+    me.hidden = true;
+    me.x = labExit.x; // ao sair (ou reconectar) aparece na frente da porta, nunca dentro do prédio
+    me.y = labExit.y;
+    socket.broadcast.emit('player:hide', { id: me.id, hidden: true });
+    savePosition(me, true);
+    socket.emit('lab:entered');
+  });
+
+  socket.on('lab:heal', async () => {
+    if (!me.hidden || labTimer || labBusy) return;
+    labBusy = true;
+    try {
+      const team = await loadTeam(prisma, u.id);
+      if (!team.length) return socket.emit('notice', { msg: 'Você não tem Pokémon na equipe.' });
+      const [all, usr] = await Promise.all([prisma.pokemon.findMany({ where: { user_id: u.id } }), prisma.user.findUnique({ where: { id: u.id } })]);
+      if (!all.some((p) => p.current_hp < p.hp) && usr.pokeballs >= HEAL_BALLS) return socket.emit('lab:healed', { already: true, balls: invOf(usr) });
+      socket.emit('lab:healing', { ms: LAB_HEAL_MS });
+      labTimer = setTimeout(async () => {
+        labTimer = null;
+        if (!me.hidden || socket.disconnected) return; // saiu no meio: cura cancelada
+        try { socket.emit('lab:healed', await healNow()); } catch (e) { console.error('Falha ao curar', e.message); socket.emit('notice', { msg: 'Falha ao curar. Tente de novo.' }); }
+      }, LAB_HEAL_MS);
+    } catch (e) {
+      console.error('Falha ao iniciar cura', e.message);
+    } finally {
+      labBusy = false;
+    }
+  });
+
+  socket.on('lab:exit', () => {
+    if (!me.hidden) return;
+    if (labTimer) socket.emit('notice', { msg: 'Cura cancelada: você saiu do laboratório.' });
+    clearTimeout(labTimer);
+    labTimer = null;
+    me.hidden = false;
+    immuneUntil = Date.now() + IMMUNE_MS;
+    socket.broadcast.emit('player:hide', { id: me.id, hidden: false });
+    teleportTo(u.id, labExit.x, labExit.y);
+    socket.emit('lab:exited');
+  });
 
   socket.on('battle:action', async (type) => {
     if (!battle || acting || !(ACTIONS.includes(type) || /^switch:\d+$/.test(type))) return;
@@ -486,7 +532,7 @@ io.on('connection', (socket) => {
     if (now - last < 30) return; // rate limit ~33 msg/s
     budget = Math.min(BUDGET_CAP, budget + ((now - last) / 1000) * MAX_SPEED);
     last = now;
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || me.hidden) return;
     if (battle || starting || raidSys.inRaid(u.id) || pvp.inMatch(u.id)) return socket.emit('player:correct', { x: me.x, y: me.y }); // parado em batalha
 
     const dist = Math.hypot(x - me.x, y - me.y);
@@ -511,15 +557,10 @@ io.on('connection', (socket) => {
         if (!w.busy && Math.hypot(me.x - w.x, me.y - w.y) < (w.water ? WATER_TOUCH : TOUCH_RADIUS)) { startBattle(w); return; }
       }
     }
-    if (key === lastTile) return;
-    lastTile = key;
-    if (tx >= CLEAR_MIN && tx <= CLEAR_MAX && ty >= CLEAR_MIN && ty <= CLEAR_MAX && now - lastHeal > 4000) {
-      lastHeal = now;
-      healParty();
-    }
   });
 
   socket.on('disconnect', async () => {
+    clearTimeout(labTimer);
     voip.onDisconnect(u.id); // antes do grupo desfazer, para avisar os pares
     raidSys.onDisconnect(u.id);
     pvp.onDisconnect(u.id);

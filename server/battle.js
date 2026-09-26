@@ -1,4 +1,4 @@
-const { SPECIES, RARITY, MOVE_NAMES, WILD_TABLE, MAX_LEVEL, expToNext, calcStats, evolveTarget, effectiveness } = require('../public/species.js');
+const { SPECIES, RARITY, MOVE_NAMES, WILD_TABLE, LEGEND_MOVES, POWER_CD, MAX_LEVEL, expToNext, calcStats, evolveTarget, effectiveness } = require('../public/species.js');
 const { BALLS } = require('../public/items.js');
 
 const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
@@ -12,6 +12,7 @@ const EXP_MULT = { win: 1, caught: 0.8, lose: 0.3, fled: 0.12 };
 const mineView = (p) => ({
   id: p.id, species_id: p.species_id, nickname: p.nickname, level: p.level,
   hp: p.current_hp, maxHp: p.hp, exp: p.current_exp, expMax: expToNext(p.level),
+  pw: LEGEND_MOVES[p.species_id] ? { name: LEGEND_MOVES[p.species_id].name, type: LEGEND_MOVES[p.species_id].type, cd: p.cd || 0 } : null, // Poder Lendário (só lendários)
 });
 const teamView = (b) => b.team.map(mineView);
 const wildView = (w) => ({ species_id: w.species_id, level: w.level, hp: w.hp, maxHp: w.maxHp });
@@ -30,7 +31,8 @@ function makeWild(id, level) {
 
 // ---------- Golpes e dano com tipos ----------
 // 'attack' = Investida (Normal). 'strong' = golpe do tipo principal do atacante (com STAB).
-function getMove(kind, types) {
+function getMove(kind, types, species) {
+  if (kind === 'power' && LEGEND_MOVES[species]) { const lm = LEGEND_MOVES[species]; return { name: '✦ ' + lm.name, type: lm.type, power: lm.power, acc: 0.9, legend: true }; }
   if (kind === 'strong') return { name: MOVE_NAMES[types[0]], type: types[0], power: 70, acc: 0.85 };
   return { name: 'Investida', type: 'normal', power: 40, acc: 1 };
 }
@@ -38,10 +40,11 @@ function getMove(kind, types) {
 // Dano = base × aleatório × STAB × efetividade × crítico.
 // Super efetivo aumenta MUITO a chance de crítico (30%); resistido quase zera (3%); normal 1/16.
 function calcHit(level, mv, atk, def, atkTypes, defTypes) {
-  const eff = effectiveness(mv.type, defTypes);
+  let eff = effectiveness(mv.type, defTypes);
+  if (mv.legend && eff < 1) eff = 1; // Poder Lendário ignora resistência e imunidade
   if (eff === 0) return { dmg: 0, eff, crit: false };
   const stab = atkTypes.includes(mv.type) ? 1.5 : 1;
-  const crit = Math.random() < (eff > 1 ? 0.3 : eff < 1 ? 0.03 : 1 / 16);
+  const crit = Math.random() < Math.max(mv.legend ? 0.25 : 0, eff > 1 ? 0.3 : eff < 1 ? 0.03 : 1 / 16);
   const base = Math.floor((((2 * level) / 5 + 2) * mv.power * atk) / def / 50) + 2;
   return { dmg: Math.max(1, Math.floor(base * (0.85 + Math.random() * 0.15) * stab * eff * (crit ? 1.5 : 1))), eff, crit };
 }
@@ -181,13 +184,19 @@ function resolveTurn(b, type) {
     }
   };
 
-  if (type === 'attack' || type === 'strong') {
-    const mv = getMove(type, myTypes);
+  // Poder Lendário: só lendários, com recarga de POWER_CD turnos (a recarga anda a cada turno que o Pokémon age)
+  if (type === 'power' && (!LEGEND_MOVES[my.species_id] || my.cd > 0)) {
+    return { log: [{ msg: LEGEND_MOVES[my.species_id] ? 'O Poder Lendário ainda está recarregando!' : 'Esse Pokémon não tem Poder Lendário.', wildHp: w.hp, mine: mineView(my) }], result: null, capture };
+  }
+  if (!type.startsWith('switch:')) { if (type === 'power') my.cd = POWER_CD; else if (my.cd > 0) my.cd--; }
+
+  if (type === 'attack' || type === 'strong' || type === 'power') {
+    const mv = getMove(type, myTypes, my.species_id);
     if (Math.random() > mv.acc) push(`${nameOf(my)} usou ${mv.name}, mas errou!`);
     else {
       const h = calcHit(my.level, mv, my.attack, w.defense, myTypes, wTypes);
       w.hp = Math.max(0, w.hp - h.dmg);
-      push(`${nameOf(my)} usou ${mv.name}!${effText(h.eff)}${h.crit ? ' Acerto crítico!' : ''} (-${h.dmg})`, null, { eff: h.eff, atk: { type: mv.type, by: 'me' } });
+      push(`${nameOf(my)} usou ${mv.name}!${effText(h.eff)}${h.crit ? ' Acerto crítico!' : ''} (-${h.dmg})`, null, { eff: h.eff, atk: { type: mv.type, by: 'me', power: !!mv.legend } });
     }
     if (w.hp <= 0) {
       push(`${wname} selvagem foi derrotado!`);

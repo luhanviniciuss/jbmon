@@ -208,6 +208,22 @@ const LAVA_TABLE = [
   [59, 0.9], [78, 0.9], [136, 0.6], [6, 0.5], [248, 0.4],
 ];
 const WORLD_TABLES = { ice: { land: ICE_TABLE, water: ICE_WATER_TABLE }, lava: { land: LAVA_TABLE, water: [] } };
+// PODER LENDÁRIO: todo lendário tem um golpe a mais que os outros Pokémon (além de Investida e Golpe Forte).
+// Ignora resistência e imunidade (nunca é "pouco efetivo"), tem 25% de crítico e recarrega por POWER_CD turnos.
+const POWER_CD = 3;
+const LEGEND_MOVES = {
+  144: { name: 'Vento Glacial Eterno', type: 'ice', power: 120 }, 145: { name: 'Tempestade Trovejante', type: 'electric', power: 120 },
+  146: { name: 'Chama Ancestral', type: 'fire', power: 120 }, 150: { name: 'Psicoquebra Suprema', type: 'psychic', power: 135 },
+  151: { name: 'Mil Formas', type: 'psychic', power: 120 }, 243: { name: 'Trovão Estrondoso', type: 'electric', power: 120 },
+  244: { name: 'Vulcão Sagrado', type: 'fire', power: 120 }, 245: { name: 'Aurora Cristalina', type: 'water', power: 120 },
+  249: { name: 'Aeroblast', type: 'flying', power: 125 }, 250: { name: 'Fogo Sagrado', type: 'fire', power: 125 },
+  251: { name: 'Chicote do Tempo', type: 'grass', power: 120 }, 377: { name: 'Punho de Rocha Ancião', type: 'rock', power: 120 },
+  378: { name: 'Zero Absoluto', type: 'ice', power: 120 }, 379: { name: 'Prisão de Aço', type: 'steel', power: 120 },
+  380: { name: 'Névoa Dragônica', type: 'dragon', power: 120 }, 381: { name: 'Lustre Dragônico', type: 'dragon', power: 120 },
+  382: { name: 'Origem do Mar', type: 'water', power: 135 }, 383: { name: 'Terra Primal', type: 'ground', power: 135 },
+  384: { name: 'Ira do Céu', type: 'dragon', power: 135 }, 385: { name: 'Desejo Estelar', type: 'steel', power: 120 },
+  386: { name: 'Onda Cósmica', type: 'psychic', power: 125 },
+};
 // Lendários que aparecem como boss a cada 3 h: [species_id, peso]
 const BOSS_TABLE = [
   [144, 3], [145, 3], [146, 3], [243, 3], [244, 3], [245, 3],
@@ -243,5 +259,5 @@ function evolveTarget(id, level) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { SPECIES, RARITY, TYPES, CHART, MOVE_NAMES, EVOLUTIONS, WILD_TABLE, WATER_TABLE, WORLD_TABLES, BOSS_TABLE, MAX_LEVEL, expToNext, minLevel, calcStats, evolveTarget, effectiveness };
+  module.exports = { SPECIES, RARITY, TYPES, CHART, MOVE_NAMES, EVOLUTIONS, WILD_TABLE, WATER_TABLE, WORLD_TABLES, BOSS_TABLE, LEGEND_MOVES, POWER_CD, MAX_LEVEL, expToNext, minLevel, calcStats, evolveTarget, effectiveness };
 }

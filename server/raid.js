@@ -2,7 +2,7 @@
 // Fluxo: boss aparece no mapa -> jogadores formam grupo (2-4) -> encostam no boss -> raid por turnos:
 //   Fase 1 (luta): cada membro age na sua vez; o boss revida no atacante. Ao chegar em 15% de HP ele fica exausto.
 //   Fase 2 (captura): o boss segue com vida; cada membro tem UMA rodada para lançar uma Pokébola.
-const { SPECIES, RARITY, BOSS_TABLE, calcStats, effectiveness } = require('../public/species.js');
+const { SPECIES, RARITY, BOSS_TABLE, LEGEND_MOVES, POWER_CD, calcStats, effectiveness } = require('../public/species.js');
 const { BALLS } = require('../public/items.js');
 const { durable } = require('./durable.js');
 const { loadTeam, nextFreeSlot } = require('./team.js');
@@ -279,14 +279,17 @@ module.exports = function createRaidSystem(ctx) {
     const my = m.mine;
     const myTypes = SPECIES[my.species_id].types;
     const strongEff = effectiveness(bTypes[0], myTypes);
-    const kind = Math.random() < (strongEff > 1 ? 0.7 : strongEff < 1 ? 0.15 : 0.4) ? 'strong' : 'attack';
-    const bmv = getMove(kind, bTypes);
+    r.bossCd = Math.max(0, (r.bossCd || 0) - 1);
+    const usePower = !!LEGEND_MOVES[r.boss.species_id] && !r.bossCd && Math.random() < 0.55; // o boss lendário também tem o Poder Lendário
+    if (usePower) r.bossCd = POWER_CD;
+    const kind = usePower ? 'power' : Math.random() < (strongEff > 1 ? 0.7 : strongEff < 1 ? 0.15 : 0.4) ? 'strong' : 'attack';
+    const bmv = getMove(kind, bTypes, r.boss.species_id);
     if (Math.random() > bmv.acc) push(`${bName} usou ${bmv.name}, mas errou!`);
     else {
       const h = calcHit(r.level, bmv, r.atk, my.defense, bTypes, myTypes);
       const dmg = h.dmg === 0 ? 0 : Math.max(1, Math.floor(h.dmg * DMG_MULT));
       my.current_hp = Math.max(0, my.current_hp - dmg);
-      push(`${bName} usou ${bmv.name} em ${m.username}!${effText(h.eff)}${h.crit ? ' Acerto crítico!' : ''} (-${dmg})`, null, { target: uid, targetMine: mineView(my), eff: h.eff, atk: { type: bmv.type, by: 'foe' } });
+      push(`${bName} usou ${bmv.name} em ${m.username}!${effText(h.eff)}${h.crit ? ' Acerto crítico!' : ''} (-${dmg})`, null, { target: uid, targetMine: mineView(my), eff: h.eff, atk: { type: bmv.type, by: 'foe', power: !!bmv.legend } });
     }
     if (my.current_hp <= 0) {
       push(`${nameOf(my)} de ${m.username} desmaiou!`, null, { target: uid, targetMine: mineView(my) });
@@ -318,7 +321,8 @@ module.exports = function createRaidSystem(ctx) {
     if (r.phase === 'fight') {
       const isSwitch = type.startsWith('switch:');
       if (m.pendingSwitch && !isSwitch) return; // depois de um desmaio só vale escolher o próximo Pokémon
-      if (!isSwitch && type !== 'attack' && type !== 'strong') return;
+      if (!isSwitch && type !== 'attack' && type !== 'strong' && type !== 'power') return;
+      if (type === 'power' && (!LEGEND_MOVES[m.mine.species_id] || m.mine.cd > 0)) return notice(uid, 'O Poder Lendário ainda está recarregando!');
       if (isSwitch) {
         // Troca: voluntária gasta o turno (o boss ataca quem entra); depois de um desmaio é grátis
         const target = m.team.find((p) => p.id === Number(type.slice(7)));
@@ -335,7 +339,8 @@ module.exports = function createRaidSystem(ctx) {
         clearTimeout(r.timer);
         const my = m.mine;
         const myTypes = SPECIES[my.species_id].types;
-        const mv = getMove(type, myTypes);
+        const mv = getMove(type, myTypes, my.species_id);
+        if (type === 'power') my.cd = POWER_CD; else if (my.cd > 0) my.cd--;
         let reached = false;
         let line;
         let atk = null;
@@ -345,7 +350,7 @@ module.exports = function createRaidSystem(ctx) {
           r.hp = Math.max(0, r.hp - h.dmg);
           if (r.hp <= r.threshold) { r.hp = r.threshold; reached = true; }
           line = `${m.username}: ${nameOf(my)} usou ${mv.name}!${effText(h.eff)}${h.crit ? ' Acerto crítico!' : ''} (-${h.dmg})`;
-          atk = { eff: h.eff, atk: { type: mv.type, by: 'me', actor: uid } };
+          atk = { eff: h.eff, atk: { type: mv.type, by: 'me', actor: uid, power: !!mv.legend } };
         }
         push(line, null, atk || undefined);
         if (reached) {

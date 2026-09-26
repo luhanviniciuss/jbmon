@@ -123,6 +123,12 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 - **Autoridade do servidor**: o servidor confere que você está na porta para entrar, roda o temporizador de 15 s e só então grava a cura (sair antes cancela; desconectar também). Dentro do laboratório você fica oculto no mapa para os outros e não pode ser desafiado nem entrar em raid.
 - **A cura automática da clareira foi removida**: agora curar é pelo laboratório. Perder uma batalha selvagem continua curando e levando ao spawn.
 
+## Poder Lendário
+- **Todo lendário tem um golpe a mais** que os outros Pokémon (além de Investida e Golpe Forte): o **Poder Lendário**, com nome e tipo próprios (Articuno: *Vento Glacial Eterno*, Moltres: *Chama Ancestral*, Mewtwo: *Psicoquebra Suprema*, Groudon: *Terra Primal*, Rayquaza: *Ira do Céu*… os 21 lendários têm o seu; `LEGEND_MOVES` em `public/species.js`).
+- **Como funciona**: poder 120 a 135 (o Golpe Forte é 70), **ignora resistência e imunidade** (nunca é "pouco efetivo" e acerta até quem seria imune), tem no mínimo **25% de crítico** e **recarrega por 3 turnos** depois de usado. O efeito visual do golpe sai sempre "maior", com o tipo do poder.
+- **Onde vale**: quando um lendário **seu** (capturado) está em campo, aparece o botão dourado brilhante "✦ nome do poder" na batalha selvagem, na **raid** (tecla 6) e no **PvP** (tecla 4), mostrando "Pronto" ou a recarga (⏳). O **boss lendário também usa o próprio poder** na raid (cerca de a cada 4 turnos), então fica mais perigoso. Pokémon comuns não têm o botão.
+- O servidor confere tudo (é lendário? recarga zerada?); a recarga é por Pokémon e por batalha.
+
 ## Clãs e PvP
 - **Onde**: botão ⚔ **Arena** (atalho K), com as abas **Desafiar**, **Clã** e **Ranking**. Funciona no celular (gaveta) e no PC.
 - **Tocar em um jogador** no mapa abre um menu: desafiar 1x1, desafiar grupo (líder), guerra de clãs (líder/oficial), convidar para o grupo ou para o clã, e sussurrar.

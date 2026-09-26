@@ -40,6 +40,17 @@ const Battle = (() => {
     });
   }
 
+  // Poder Lendário: só aparece quando o Pokémon em campo é lendário; mostra o tipo e a recarga
+  function renderPower() {
+    const b = document.querySelector('#bActions [data-act=power]');
+    const pw = st.pw;
+    b.hidden = !pw;
+    if (!pw) return;
+    b.innerHTML = '<span class="mvname">✦ ' + esc(pw.name) + '</span><span class="tchip" style="--tc:' + TYPES[pw.type].color + '">' + TYPES[pw.type].label + '</span>' + (pw.cd > 0 ? '<i class="efx down">⏳ ' + pw.cd + '</i>' : '<i class="efx up">Pronto</i>') + '<small>6</small>';
+    b.style.setProperty('--tc', TYPES[pw.type].color);
+    b.disabled = locked || pw.cd > 0;
+  }
+
   function setFoe(w) {
     st.foeMax = w.maxHp;
     st.foeSp = w.species_id;
@@ -60,6 +71,8 @@ const Battle = (() => {
       if (animate && switched) { $('myImg').classList.remove('released'); void $('myImg').offsetWidth; $('myImg').classList.add('released'); }
       renderMoves();
     }
+    st.pw = m.pw || null;
+    renderPower();
     $('myName').textContent = m.nickname || speciesName(m.species_id);
     $('myLv').textContent = 'Lv. ' + m.level;
     $('myHpTxt').textContent = `${m.hp} / ${m.maxHp}`;
@@ -81,7 +94,7 @@ const Battle = (() => {
 
   function lock(v) {
     locked = v;
-    document.querySelectorAll('#bActions .act').forEach((b) => (b.disabled = v || (b.dataset.act === 'ballmenu' && invTotal(inv) <= 0) || (b.dataset.act === 'switch' && !canSwitch())));
+    document.querySelectorAll('#bActions .act').forEach((b) => (b.disabled = v || (b.dataset.act === 'ballmenu' && invTotal(inv) <= 0) || (b.dataset.act === 'switch' && !canSwitch()) || (b.dataset.act === 'power' && !(st.pw && st.pw.cd <= 0))));
     $('ballBack').disabled = v;
     refreshBalls();
   }
@@ -151,7 +164,7 @@ const Battle = (() => {
         const mineAtt = e.atk.by === 'me';
         if (!(mode === 'raid' && !mineAtt && e.target !== MY_ID)) { // raid: golpe do boss em outro jogador não passa por aqui
           await Fx.attack($('fxCanvas'), e.atk, $(mineAtt ? 'myImg' : 'foeImg'), $(mineAtt ? 'foeImg' : 'myImg'), {
-            crit: /crítico/.test(e.msg), dmg: +(/\(-(\d+)\)/.exec(e.msg)?.[1] || 0), eff: e.eff, lunge: !(mode === 'raid' && mineAtt && e.atk.actor !== MY_ID),
+            crit: /crítico/.test(e.msg) || !!e.atk.power, dmg: +(/\(-(\d+)\)/.exec(e.msg)?.[1] || 0), eff: e.eff, lunge: !(mode === 'raid' && mineAtt && e.atk.actor !== MY_ID),
           });
         }
       }
@@ -257,7 +270,7 @@ const Battle = (() => {
     const fight = s.phase === 'fight';
     locked = !myTurn;
     const forced = myTurn && fight && !!s.turn.forced; // o Pokémon da vez desmaiou: escolha obrigatória
-    document.querySelectorAll('#bActions .act').forEach((b) => (b.disabled = !myTurn || !fight || forced || b.dataset.act === 'ballmenu' || (b.dataset.act === 'switch' && !canSwitch())));
+    document.querySelectorAll('#bActions .act').forEach((b) => (b.disabled = !myTurn || !fight || forced || b.dataset.act === 'ballmenu' || (b.dataset.act === 'switch' && !canSwitch()) || (b.dataset.act === 'power' && !(st.pw && st.pw.cd <= 0))));
     const capture = myTurn && !fight; // fase de captura: só Pokébolas (uma rodada por membro)
     $('ballBack').hidden = true;
     if (forced) { locked = false; openSwitch(true); } else showPicker(capture);
@@ -311,6 +324,7 @@ const Battle = (() => {
 
   function act(type) {
     if (!active || locked) return;
+    if (type === 'power' && !(st.pw && st.pw.cd <= 0)) return; // sem Poder Lendário ou recarregando
     if (type === 'ballmenu') return invTotal(inv) > 0 && showPicker(true);
     if (type === 'switch') return canSwitch() && openSwitch(false);
     lock(true);
@@ -343,7 +357,7 @@ const Battle = (() => {
       else if (KINDS[e.key - 1]) act('ball:' + KINDS[e.key - 1]);
       return;
     }
-    const map = { 1: 'attack', 2: 'strong', 3: 'ballmenu', 4: 'switch', 5: 'run' };
+    const map = { 1: 'attack', 2: 'strong', 3: 'ballmenu', 4: 'switch', 5: 'run', 6: 'power' };
     if (map[e.key]) act(map[e.key]);
   });
 

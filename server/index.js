@@ -43,7 +43,7 @@ const WILD_WANDER = 3; // tiles de distância máxima do "lar"
 const TOUCH_RADIUS = 28; // px: encostar num selvagem inicia a batalha
 const RESPAWN_MS = 15000;
 const IMMUNE_MS = 4000; // após uma batalha, ninguém te puxa de novo
-const ACTIONS = ['attack', 'strong', 'run', ...Object.keys(BALLS).map((k) => 'ball:' + k)];
+const ACTIONS = ['attack', 'strong', 'power', 'run', ...Object.keys(BALLS).map((k) => 'ball:' + k)];
 const LEVEL_BONUS = { common: 0, uncommon: 1, rare: 2, epic: 4, legendary: 0 };
 const LAB_HEAL_MS = 15000; // tempo da cura no laboratório
 const HEAL_BALLS = 10; // o Centro Pokémon repõe até esta quantidade

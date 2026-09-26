@@ -596,3 +596,10 @@ textarea.af { resize: vertical; }
 @media (min-width: 900px) {
   .battle > .b-panel { width: min(780px, 100%); align-self: center; }
 }
+
+/* Poder Lendário: botão dourado que brilha quando está pronto */
+.a6 { background: linear-gradient(135deg, #f0b400, #ff7a59 55%, #b04cff); color: #fff; grid-column: 1 / -1; }
+.act.legend { box-shadow: 0 0 0 2px rgba(255, 214, 90, .55), 0 0 18px rgba(240, 180, 0, .45); animation: legendGlow 1.6s ease-in-out infinite; }
+.act.legend:disabled { animation: none; box-shadow: none; filter: grayscale(.5); }
+.act.legend[hidden] { display: none; }
+@keyframes legendGlow { 50% { box-shadow: 0 0 0 3px rgba(255, 230, 120, .9), 0 0 28px rgba(255, 190, 40, .8); } }

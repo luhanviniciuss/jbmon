@@ -166,6 +166,13 @@ const Arena = (() => {
     $('pvFoePips').innerHTML = s.foe.team.map((t) => '<i class="' + (t.hp <= 0 ? 'ko' : '') + '"></i>').join('');
     setBar('pvMyHp', me.hp, me.maxHp);
     setBar('pvFoeHp', foe.hp, foe.maxHp);
+    // Poder Lendário (só quando o Pokémon em campo é lendário)
+    const pvPower = document.querySelector('#pvActions [data-act=power]');
+    pvPower.hidden = !me.pw;
+    if (me.pw) {
+      pvPower.innerHTML = '<span class="mvname">✦ ' + esc(me.pw.name) + '</span><span class="tchip" style="--tc:' + TYPES[me.pw.type].color + '">' + TYPES[me.pw.type].label + '</span>' + (me.pw.cd > 0 ? '<i class="efx down">⏳ ' + me.pw.cd + '</i>' : '<i class="efx up">Pronto</i>') + '<small>4</small>';
+      pvPower.style.setProperty('--tc', TYPES[me.pw.type].color);
+    }
     // botões de golpe com tipo e efetividade
     const mt = SPECIES[me.species_id].types, ft = SPECIES[foe.species_id].types;
     [['attack', 'normal', 'Investida', '1'], ['strong', mt[0], MOVE_NAMES[mt[0]], '2']].forEach(([act, type, name, key]) => {
@@ -200,11 +207,12 @@ const Arena = (() => {
 
   function lock(v) {
     locked = v;
-    document.querySelectorAll('#pvActions .act').forEach((b) => (b.disabled = v || (b.dataset.act === 'switch' && !m?.you.team.some((p, i) => p.hp > 0 && i !== m.you.idx))));
+    document.querySelectorAll('#pvActions .act').forEach((b) => (b.disabled = v || (b.dataset.act === 'switch' && !m?.you.team.some((p, i) => p.hp > 0 && i !== m.you.idx)) || (b.dataset.act === 'power' && !(m?.you.team[m.you.idx]?.pw && m.you.team[m.you.idx].pw.cd <= 0))));
   }
 
   function act(a) {
     if (!m || locked || m.over) return;
+    if (a === 'power' && !(m.you.team[m.you.idx]?.pw && m.you.team[m.you.idx].pw.cd <= 0)) return; // sem Poder Lendário ou recarregando
     if (a === 'switch') return openSwitch(false);
     if (a === 'forfeit') { if (!confirm('Desistir deste duelo?')) return; socket.emit('pvp:forfeit'); return; }
     lock(true);
@@ -251,7 +259,7 @@ const Arena = (() => {
       msg(e.msg);
       if (e.atk && !first) {
         const mineAtt = e.atk.by === 'me';
-        await Fx.attack($('pvFx'), e.atk, $(mineAtt ? 'pvMy' : 'pvFoe'), $(mineAtt ? 'pvFoe' : 'pvMy'), { crit: /crítico/.test(e.msg), dmg: +(/\(-(\d+)\)/.exec(e.msg)?.[1] || 0), eff: e.eff });
+        await Fx.attack($('pvFx'), e.atk, $(mineAtt ? 'pvMy' : 'pvFoe'), $(mineAtt ? 'pvFoe' : 'pvMy'), { crit: /crítico/.test(e.msg) || !!e.atk.power, dmg: +(/\(-(\d+)\)/.exec(e.msg)?.[1] || 0), eff: e.eff });
       }
       if (/usou|errou/.test(e.msg) && !first) { // sacode quem levou o golpe
         const meNamed = e.msg.includes('de ' + s.you.name + ' usou');
@@ -363,7 +371,7 @@ const Arena = (() => {
     if (!$('pvpBattle').hidden) {
       if (!$('pvContinue').hidden) { if (e.key === 'Enter' || e.key === ' ') closeBattle(); return; }
       if (!$('pvSwitch').hidden) { if (/^[1-3]$/.test(e.key) && m?.you.team[e.key - 1]) act('switch:' + (e.key - 1)); return; }
-      const map = { 1: 'attack', 2: 'strong', 3: 'switch' };
+      const map = { 1: 'attack', 2: 'strong', 3: 'switch', 4: 'power' };
       if (map[e.key]) act(map[e.key]);
       return;
     }

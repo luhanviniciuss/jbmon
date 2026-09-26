@@ -3,7 +3,7 @@
 // então ninguém perde HP, EXP ou Pokémon. O que persiste é só o ranking (rating), vitórias/derrotas e os pontos do clã.
 // Cada lado tem o mesmo número de jogadores; o jogador N de um lado enfrenta o jogador N do outro (duelos em paralelo).
 // Vence o lado com mais duelos ganhos (desempate: mais HP restante). Turnos simultâneos: os dois escolhem, então resolve.
-const { SPECIES, calcStats } = require('../public/species.js');
+const { SPECIES, LEGEND_MOVES, POWER_CD, calcStats } = require('../public/species.js');
 const { getMove, calcHit, effText, nameOf } = require('./battle.js');
 
 const LEVEL = 50;
@@ -127,7 +127,7 @@ module.exports = function createPvp({ biomeOf, app, prisma, auth, io, socketByUs
     }
   }
 
-  const pub = (t) => t.map((m) => ({ species_id: m.species_id, nickname: m.nickname, level: m.level, hp: m.hp, maxHp: m.maxHp }));
+  const pub = (t) => t.map((m) => ({ species_id: m.species_id, nickname: m.nickname, level: m.level, hp: m.hp, maxHp: m.maxHp, pw: LEGEND_MOVES[m.species_id] ? { name: LEGEND_MOVES[m.species_id].name, type: LEGEND_MOVES[m.species_id].type, cd: m.cd || 0 } : null }));
   const summary = (match) => match.duels.map((d) => ({ a: d.p[0].name, b: d.p[1].name, winner: d.over ? d.winner : null }));
 
   function pushState(match, duel, log = []) {
@@ -137,7 +137,7 @@ module.exports = function createPvp({ biomeOf, app, prisma, auth, io, socketByUs
         match: match.id, mode: match.mode, biome: match.biome, duel: duel.n, clans: match.clanNames, side: match.sides[0].includes(pl.uid) ? 0 : 1,
         you: { name: pl.name, team: pub(pl.team), idx: pl.idx, forced: pl.forced, chose: !!pl.choice },
         foe: { name: foe.name, team: pub(foe.team), idx: foe.idx },
-        log: log.map((e) => (e.atk ? { ...e, atk: { type: e.atk.type, by: e.atk.by === k ? 'me' : 'foe' } } : e)), deadline: duel.over ? 0 : duel.deadline, over: duel.over, won: duel.over ? (duel.winner === k ? 'you' : 'foe') : null,
+        log: log.map((e) => (e.atk ? { ...e, atk: { type: e.atk.type, by: e.atk.by === k ? 'me' : 'foe', power: !!e.atk.power } } : e)), deadline: duel.over ? 0 : duel.deadline, over: duel.over, won: duel.over ? (duel.winner === k ? 'you' : 'foe') : null,
         duels: summary(match).map((s) => ({ ...s })),
       });
     });
@@ -163,6 +163,7 @@ module.exports = function createPvp({ biomeOf, app, prisma, auth, io, socketByUs
 
   const okAction = (pl, a) => {
     if (pl.forced) return /^switch:\d$/.test(a) && switchOk(pl, a);
+    if (a === 'power') { const cur = pl.team[pl.idx]; return !!LEGEND_MOVES[cur.species_id] && !(cur.cd > 0); } // Poder Lendário: só lendário e sem recarga
     return a === 'attack' || a === 'strong' || (/^switch:\d$/.test(a) && switchOk(pl, a));
   };
   const switchOk = (pl, a) => { const m = pl.team[Number(a.slice(7))]; return !!m && m.hp > 0 && (pl.forced || Number(a.slice(7)) !== pl.idx); };
@@ -203,11 +204,12 @@ module.exports = function createPvp({ biomeOf, app, prisma, auth, io, socketByUs
         const am = cur(att), dm = cur(def);
         if (am.hp <= 0) continue;
         const aT = SPECIES[am.species_id].types, dT = SPECIES[dm.species_id].types;
-        const mv = getMove(att.choice, aT);
+        const mv = getMove(att.choice, aT, am.species_id);
+        if (att.choice === 'power') am.cd = POWER_CD; else if (am.cd > 0) am.cd--;
         if (Math.random() > mv.acc) { log.push({ msg: `${nameOf(am)} de ${att.name} usou ${mv.name}, mas errou!` }); continue; }
         const h = calcHit(LEVEL, mv, am.attack, dm.defense, aT, dT);
         dm.hp = Math.max(0, dm.hp - h.dmg);
-        log.push({ msg: `${nameOf(am)} de ${att.name} usou ${mv.name}!${effText(h.eff)}${h.crit ? ' Acerto crítico!' : ''} (-${h.dmg})`, eff: h.eff, atk: { type: mv.type, by: k } });
+        log.push({ msg: `${nameOf(am)} de ${att.name} usou ${mv.name}!${effText(h.eff)}${h.crit ? ' Acerto crítico!' : ''} (-${h.dmg})`, eff: h.eff, atk: { type: mv.type, by: k, power: !!mv.legend } });
         if (dm.hp <= 0) log.push({ msg: `${nameOf(dm)} de ${def.name} desmaiou!` });
       }
     }

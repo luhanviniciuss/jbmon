@@ -393,7 +393,7 @@ class WorldScene extends Phaser.Scene {
     this.path = null;
     this.lastTarget = '';
     // Clique/toque: anda até o ponto (arrastar mantém seguindo o dedo/mouse)
-    this.input.on('pointerdown', (p) => this.setTarget(p, false));
+    this.input.on('pointerdown', (p, over) => { if (over && over.length) return; Arena.closeMenu(); this.setTarget(p, false); });
     this.input.on('pointermove', (p) => { if (p.isDown) this.setTarget(p, true); });
     this.input.keyboard.removeCapture('W,A,S,D');
 
@@ -540,6 +540,9 @@ class WorldScene extends Phaser.Scene {
     if (this.others.has(p.id)) return;
     const shadow = this.add.image(p.x, p.y + 12, 'shadow').setDepth(8);
     const sprite = this.add.sprite(p.x, p.y, 'other').setDepth(9);
+    sprite.setInteractive(new Phaser.Geom.Rectangle(-10, -14, 52, 60), Phaser.Geom.Rectangle.Contains);
+    sprite.input.cursor = 'pointer';
+    sprite.on('pointerdown', (ptr) => Arena.playerMenu(p.id, ptr.event?.clientX ?? ptr.x, ptr.event?.clientY ?? ptr.y));
     const o = { sprite, shadow, name: p.username, label: this.label(tagged(p.username, p.clan)), tag: this.combatTag(), combat: null, clan: p.clan || null };
     this.others.set(p.id, o);
     this.setCombat(p.id, p.combat);
@@ -687,7 +690,10 @@ class WorldScene extends Phaser.Scene {
     const dot = (px, py, col, r) => { c.fillStyle = col; c.beginPath(); c.arc((px / TILE) * k, (py / TILE) * k, r, 0, Math.PI * 2); c.fill(); };
     if (BOSS) { c.lineWidth = 1.5; c.strokeStyle = '#fff'; dot(BOSS.x, BOSS.y, '#f0b400', 4.2); c.stroke(); }
     this.wilds.forEach((w) => dot(w.img.x, w.img.y, w.water ? '#5ec8ff' : '#ffb02e', 1.8));
-    this.others.forEach((o) => dot(o.sprite.x, o.sprite.y, o.combat ? '#ff4d5e' : '#4da3ff', 2.5));
+    const mates = new Set((GROUP?.members || []).map((m) => m.id));
+    this.others.forEach((o, id) => { if (!mates.has(id)) dot(o.sprite.x, o.sprite.y, o.combat ? '#ff4d5e' : '#4da3ff', 2.5); });
+    c.lineWidth = 1.5; c.strokeStyle = '#fff';
+    mates.forEach((id) => { const o = this.others.get(id); if (o) { dot(o.sprite.x, o.sprite.y, '#3ddc97', 3.8); c.stroke(); } }); // grupo: verde com contorno
     c.lineWidth = 1.5; c.strokeStyle = '#fff'; dot(this.player.x, this.player.y, '#ff4d5e', 3.2); c.stroke();
   }
 

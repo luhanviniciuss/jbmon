@@ -456,3 +456,12 @@ textarea.af { resize: vertical; }
 #pvActions .act:not(.a1):not(.a2) { grid-column: auto; }
 @media (max-width: 640px) { .pv-duels { top: calc(132px + var(--safe-t)); max-width: 48vw; } }
 @media (max-height: 520px) { #pvActions { grid-template-columns: repeat(4, 1fr); } .pv-msg { min-height: 0; font-size: 14px; } }
+
+/* menu ao tocar em outro jogador */
+.pmenu { position: fixed; z-index: 30; min-width: 210px; max-width: calc(100vw - 16px); padding: 10px; border-radius: 16px; display: flex; flex-direction: column; gap: 6px; animation: rise .2s both; }
+.pmenu[hidden] { display: none; }
+.pm-name { font-weight: 800; padding: 2px 4px 4px; }
+.pm-name small { color: var(--green); font-weight: 600; }
+.pmenu button { min-height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,.08); color: var(--text); font: 700 14px var(--font); text-align: left; cursor: pointer; }
+.pmenu button:hover { background: rgba(255,255,255,.18); }
+.pmenu button.ghost { color: var(--muted); text-align: center; }

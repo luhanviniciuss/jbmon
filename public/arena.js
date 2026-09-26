@@ -292,6 +292,42 @@ const Arena = (() => {
     if (isOpen()) render();
   }
 
+  // ---------------------------------------------------------------- menu ao tocar em outro jogador
+  const RANKS = { member: 1, officer: 2, leader: 3 };
+  function closeMenu() { $('playerMenu').hidden = true; }
+  function playerMenu(id, cx, cy) {
+    if (inBattle) return;
+    const o = window.worldScene?.others.get(id);
+    if (!o) return;
+    const name = o.name;
+    const isLeader = GROUP && GROUP.leader === MY_ID;
+    const mate = GROUP?.members.some((mb) => mb.id === id);
+    const acts = [
+      ['solo', '🥊 Desafiar 1x1'],
+      ...(isLeader && !mate ? [['group', '👥 Desafiar grupo']] : []),
+      ...(MY_CLAN && o.clan && RANKS[MY_CLAN.role] >= 2 ? [['clan', '🏰 Guerra de clãs']] : []),
+      ...(!mate && (!GROUP || isLeader) ? [['invite', '➕ Convidar para o grupo']] : []),
+      ...(MY_CLAN && RANKS[MY_CLAN.role] >= 2 && !o.clan ? [['clanInvite', '🏰 Convidar para o clã']] : []),
+      ['whisper', '💬 Sussurrar'],
+    ];
+    const box = $('playerMenu');
+    box.innerHTML = '<div class="pm-name">' + (o.clan ? '<span class="ctag">[' + esc(o.clan.tag) + ']</span> ' : '') + esc(name) + (mate ? ' <small>(do seu grupo)</small>' : '') + '</div>' +
+      acts.map(([k, t]) => '<button data-k="' + k + '">' + t + '</button>').join('') + '<button data-k="x" class="ghost">Fechar</button>';
+    box.hidden = false;
+    // posiciona junto ao toque, sem sair da tela
+    const w = box.offsetWidth, hh = box.offsetHeight;
+    box.style.left = Math.max(8, Math.min(innerWidth - w - 8, cx - w / 2)) + 'px';
+    box.style.top = Math.max(8, Math.min(innerHeight - hh - 8, cy + 14)) + 'px';
+    box.querySelectorAll('button').forEach((b) => b.addEventListener('click', async () => {
+      const k = b.dataset.k;
+      closeMenu();
+      if (k === 'solo' || k === 'group' || k === 'clan') socket.emit('pvp:challenge', { mode: k, target: name });
+      else if (k === 'invite') socket.emit('group:invite', name);
+      else if (k === 'clanInvite') { try { await api('/clan/invite', { username: name }); toast('Convite de clã enviado'); } catch (e) { say(e); } }
+      else if (k === 'whisper') { openChat(true, true); $('chatInput').value = '/w ' + name + ' '; }
+    }));
+  }
+
   // ---------------------------------------------------------------- inicialização
   function init(s) {
     socket = s;
@@ -299,7 +335,7 @@ const Arena = (() => {
     s.on('pvp:challenge-gone', hideChallenge);
     s.on('pvp:state', onState);
     s.on('pvp:end', onEnd);
-    s.on('clan:update', () => { if (isOpen() && tab === 'clan') render(); });
+    s.on('clan:update', () => { api('/clan/me').then((r) => { if (MY_CLAN && r.clan) MY_CLAN.role = r.role; }).catch(() => {}); if (isOpen() && tab === 'clan') render(); });
     s.on('clan:invited', ({ from, name, tag }) => {
       $('inviteTxt').textContent = from + ' convidou você para o clã [' + tag + '] ' + name;
       $('invYes').onclick = async () => { $('invite').hidden = true; try { await api('/clan/respond', { accept: true }); toast('Você entrou no clã!'); } catch (e) { say(e); } $('invYes').onclick = null; };
@@ -331,5 +367,6 @@ const Arena = (() => {
     if (e.key === 'Escape') open(false);
   });
 
-  return { init, open };
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+  return { init, open, playerMenu, closeMenu };
 })();

@@ -90,6 +90,8 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 
 ## Clãs e PvP
 - **Onde**: botão ⚔ **Arena** (atalho K), com as abas **Desafiar**, **Clã** e **Ranking**. Funciona no celular (gaveta) e no PC.
+- **Tocar em um jogador** no mapa abre um menu: desafiar 1x1, desafiar grupo (líder), guerra de clãs (líder/oficial), convidar para o grupo ou para o clã, e sussurrar.
+- **Minimapa**: os membros do seu grupo aparecem em **verde** com contorno branco (os demais jogadores em azul, em combate em vermelho).
 - **Clã**: qualquer jogador cria um (nome 3-16, tag 2-4 letras/números, únicos) e vira **líder**; até **30 membros**; cargos **líder > oficial > membro**. Líder e oficiais convidam (o convidado aceita em até 60 s) e expulsam quem tem cargo menor; só o líder promove/rebaixa, passa a liderança e dissolve. O líder não pode sair sem passar a liderança; clã vazio é apagado. Todas as permissões são conferidas no servidor a cada ação. A **tag** aparece ao lado do nome no mapa e no chat, e há um canal **Clã** no chat (`/c mensagem`).
 - **PvP seguro**: todos lutam no **Lv.50** com **cópias** de até 3 Pokémon da equipe (do slot 1 ao 3). Ninguém perde HP, EXP ou Pokémon; só o ranking é gravado. Turnos simultâneos de 30 s (golpe, golpe forte ou troca; quem fica ausente 3 turnos desiste; desconectar = desistir do duelo). Usa a mesma tabela de tipos/críticos da batalha selvagem.
 - **Modos**: **Solo 1x1**; **Grupo** (líder do grupo desafia o líder de outro grupo do mesmo tamanho, 2 a 4: o jogador N de um lado enfrenta o N do outro, em paralelo); **Guerra de clãs** (líder/oficial de um clã contra líder/oficial de outro, com um grupo só de membros do clã ou 1x1). Vence o lado com mais duelos ganhos (desempate: mais HP restante).

@@ -122,7 +122,7 @@ function renderParty() {
 }
 
 async function openParty(open = !$('drawer').classList.contains('open')) {
-  if (open) { $('bag').classList.remove('open'); $('group').classList.remove('open'); $('arena').classList.remove('open'); }
+  if (open) { $('bag').classList.remove('open'); $('group').classList.remove('open'); $('arena').classList.remove('open'); $('settings').classList.remove('open'); }
   const drawer = $('drawer');
   drawer.classList.toggle('open', open);
   drawer.setAttribute('aria-hidden', !open);
@@ -198,7 +198,7 @@ function setClanLabel() {
 function renderGroup() {
   const leader = !GROUP || GROUP.leader === MY_ID;
   const members = GROUP
-    ? GROUP.members.map((m) => '<div class="item gm"><span class="avatar sm">' + esc(m.username[0]) + '</span><div><b>' + esc(m.username) + (m.id === GROUP.leader ? ' 👑' : '') + (m.id === MY_ID ? ' (você)' : '') + '</b></div></div>').join('')
+    ? GROUP.members.map((m) => '<div class="item gm"><span class="avatar sm" data-vid="' + m.id + '">' + esc(m.username[0]) + '</span><div><b>' + esc(m.username) + (m.id === GROUP.leader ? ' 👑' : '') + (m.id === MY_ID ? ' (você)' : '') + '</b></div></div>').join('')
     : '<p class="empty">Você não está em um grupo.</p>';
   $('groupBody').innerHTML =
     '<div class="section-title">Seu grupo' + (GROUP ? ' (' + GROUP.members.length + '/4)' : '') + '</div>' + members +
@@ -220,7 +220,7 @@ function openGroup(open = !$('group').classList.contains('open')) {
   if (!open) return;
   $('drawer').classList.remove('open');
   $('bag').classList.remove('open');
-  $('arena').classList.remove('open');
+  $('arena').classList.remove('open'); $('settings').classList.remove('open');
   renderGroup();
 }
 $('groupBtn').addEventListener('click', () => openGroup());
@@ -443,6 +443,7 @@ class WorldScene extends Phaser.Scene {
     this.socket.on('player:combat', ({ id, combat }) => this.setCombat(id, combat));
     Battle.init(this.socket);
     Arena.init(this.socket);
+    Settings.init(this.socket);
     this.socket.on('notice', ({ msg, big }) => toast(msg, big));
     this.socket.on('boss:state', ({ boss, nextIn }) => { BOSS_NEXT = nextIn != null ? Date.now() + nextIn : null; this.setBoss(boss); });
     this.socket.on('group:update', (gr) => { GROUP = gr; setGroupLabel(); if ($('group').classList.contains('open')) renderGroup(); });

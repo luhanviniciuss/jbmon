@@ -34,7 +34,7 @@ const Arena = (() => {
     $('arena').classList.toggle('open', on);
     $('arena').setAttribute('aria-hidden', !on);
     if (!on) return;
-    ['drawer', 'bag', 'group'].forEach((id) => $(id).classList.remove('open'));
+    ['drawer', 'bag', 'group', 'settings'].forEach((id) => $(id).classList.remove('open'));
     render();
   }
   function setTab(t) {

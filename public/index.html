@@ -31,10 +31,11 @@
   <!-- HUD -->
   <div id="hud" hidden>
     <div class="hud-top">
-      <div class="chip glass"><span class="avatar" id="avatar">?</span><b id="hudName">—</b></div>
+      <button class="chip glass profile-chip" id="profileBtn" aria-label="Configurações"><span class="avatar" id="avatar">?</span><b id="hudName">—</b><span class="gear">⚙</span></button>
       <div class="chip glass plain"><i class="dot"></i><span id="online">1</span><span class="lbl">&nbsp;online</span></div>
       <div class="chip glass plain" title="Pokébolas"><span class="ball sm"></span><b id="balls">0</b></div>
       <button class="chip glass boss-chip" id="bossChip" hidden></button>
+      <button class="chip glass voice-chip" id="voiceChip" hidden></button>
     </div>
 
     <!-- Botões de ação: colunas flutuantes no polegar (celular) / barra no topo (desktop) -->
@@ -75,6 +76,12 @@
     <button class="btn small" id="invYes">Aceitar</button>
     <button class="btn small ghost" id="invNo">Recusar</button>
   </div>
+
+  <!-- Configurações -->
+  <aside id="settings" class="drawer glass" aria-hidden="true">
+    <header><h2>⚙ Configurações</h2><button class="close" id="closeSettings" aria-label="Fechar">✕</button></header>
+    <div id="settingsBody" class="list"></div>
+  </aside>
 
   <!-- Arena: clã, desafios PvP e ranking -->
   <aside id="arena" class="drawer glass" aria-hidden="true">
@@ -189,6 +196,7 @@
   <script src="/game.js"></script>
   <script src="/battle.js"></script>
   <script src="/arena.js"></script>
+  <script src="/settings.js"></script>
   <script src="/admin.js"></script>
 </body>
 </html>

@@ -15,6 +15,8 @@ server/battle.js       Regras de batalha, tipos, dano, captura, EXP
 server/raid.js         Grupos, boss lendário a cada 3 h e raid cooperativa
 server/chat.js         Chat global, de grupo e sussurros
 server/clan.js         Clãs: criar, convidar, cargos, ranking (/api/clan/*)
+server/voip.js         Sinalização da voz do grupo (WebRTC)
+public/settings.js     Configurações e VoIP do grupo
 server/pvp.js          PvP solo, de grupo e guerra de clãs; rating (/api/pvp/*)
 public/arena.js        Arena: clã, desafios, ranking e tela da batalha PvP
 server/admin.js        API do painel de administração (/api/admin/*)
@@ -97,6 +99,12 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 - **Modos**: **Solo 1x1**; **Grupo** (líder do grupo desafia o líder de outro grupo do mesmo tamanho, 2 a 4: o jogador N de um lado enfrenta o N do outro, em paralelo); **Guerra de clãs** (líder/oficial de um clã contra líder/oficial de outro, com um grupo só de membros do clã ou 1x1). Vence o lado com mais duelos ganhos (desempate: mais HP restante).
 - **Ranking**: rating estilo Elo (começa em 1000, mínimo 100) em toda luta; guerra de clãs também dá **+30 pontos** ao clã vencedor e **-10** ao perdedor (nunca abaixo de 0). Aba Ranking mostra os 20 melhores jogadores e clãs. **Anti-farm**: as mesmas duas pontas lutando mais de 4 vezes por hora não rendem mais pontos.
 - **Persistência**: rating, vitórias/derrotas e pontos do clã gravados numa transação (`durable`); clãs em `Clan`, vínculo em `User.clan_id`/`clan_role`.
+
+## Configurações e voz do grupo
+- **Configurações**: toque no seu nome/avatar no topo do HUD (⚙) para abrir a gaveta de configurações (guardadas no aparelho).
+- **Voz do grupo (VoIP)**: liga/desliga por um interruptor. Só vale com você em um grupo de 2+ jogadores e com a voz ligada; só ouvem você os membros do seu grupo que também ligaram. Há **silenciar microfone** (também pelo botão 🎙/🔇 que aparece no topo enquanto a voz está ativa), **volume dos colegas** e um anel verde no avatar de quem está falando (painel do grupo e configurações).
+- **Como funciona**: WebRTC ponto a ponto (malha, até 4 jogadores): o áudio **não passa pelo servidor**. O servidor (`server/voip.js`) só repassa a sinalização entre membros do mesmo grupo com a voz ligada (confere o grupo a cada mensagem, limita tamanho e taxa). O microfone só é aberto enquanto você está numa chamada e é solto ao sair do grupo ou desligar. Usa STUN público do Google.
+- **Requisitos**: navegador com permissão de microfone e **HTTPS** em produção (`localhost` também vale). Sem servidor TURN, redes muito restritivas podem não conectar (a maioria conecta direto).
 
 ## Como funciona
 - **Auth**: `POST /api/register|login` devolve um JWT, usado no handshake do Socket.io e na API (`GET /api/party`).

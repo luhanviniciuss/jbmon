@@ -15,6 +15,7 @@ const createChat = require('./chat.js');
 const createModeration = require('./moderation.js');
 const createClans = require('./clan.js');
 const createPvp = require('./pvp.js');
+const createVoip = require('./voip.js');
 const registerAdmin = require('./admin.js');
 const { retry, durable, flushPending, pendingCount } = require('./durable.js');
 const { loadTeam, nextFreeSlot, partyOf } = require('./team.js');
@@ -325,6 +326,7 @@ const pvp = createPvp({
   isBusy: (uid) => battlingUsers.has(uid) || raidSys.inRaid(uid),
   setBusy: (uid, v) => (v ? battlingUsers.add(uid) : battlingUsers.delete(uid)),
 });
+const voip = createVoip({ socketByUser, groupInfo: raidSys.groupInfo });
 const chat = createChat({ io, socketByUser, meByUser, groupMembers: raidSys.groupMembers, clanMembers: clans.clanMembersOnline, moderation });
 
 io.use(async (socket, next) => {
@@ -355,6 +357,7 @@ io.on('connection', (socket) => {
   raidSys.bind(socket, u.id);
   chat.bind(socket, u.id);
   pvp.bind(socket, u.id);
+  voip.bind(socket, u.id);
 
   socket.emit('players:init', {
     self: me,
@@ -517,6 +520,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', async () => {
+    voip.onDisconnect(u.id); // antes do grupo desfazer, para avisar os pares
     raidSys.onDisconnect(u.id);
     pvp.onDisconnect(u.id);
     if (battle) releaseWild(battle.world);

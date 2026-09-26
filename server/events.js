@@ -11,7 +11,6 @@ const REVEAL_MS = FAST ? 700 : 4500;
 const END_MS = FAST ? 1500 : 10000;
 const QUIZ_N = 10;
 const EVERY_MS = 20 * 60000; // automático: de 20 em 20 minutos
-const MASTER_COOLDOWN_MS = 6 * 3600000; // a mesma pessoa não ganha Master Ball a cada quiz
 
 // Prêmios (Ultra Ball e Master Ball só saem em eventos)
 const PRIZES = {
@@ -27,11 +26,10 @@ module.exports = function createEvents({ io, prisma, socketByUser, meByUser, dur
   let ev = null; // evento em andamento
   let autoOn = true;
   let nextAt = Date.now() + EVERY_MS;
-  const lastMaster = new Map(); // uid -> quando ganhou Master Ball
   let statusTimer = 0;
 
   const types = {
-    quiz: { id: 'quiz', name: 'Quiz Pokémon', icon: '❓', desc: '10 perguntas sobre Pokémon, 15 s cada. Quanto mais rápido, mais pontos. Prêmios: Master e Ultra Balls!', run: runQuiz },
+    quiz: { id: 'quiz', name: 'Quiz Pokémon', icon: '❓', desc: '10 perguntas sobre Pokémon, 15 s cada. Quanto mais rápido, mais pontos. Empate em 1º = perguntas de desempate. O 1º ganha uma Master Ball!', run: runQuiz },
   };
 
   const sleepUntil = (e, ms) => new Promise((resolve) => {
@@ -53,17 +51,19 @@ module.exports = function createEvents({ io, prisma, socketByUser, meByUser, dur
   function join(uid) {
     if (!ev || !(ev.phase === 'lobby' || ev.phase === 'running') || !inHall(uid)) return;
     if (!ev.parts.has(uid)) { ev.parts.set(uid, { name: meByUser.get(uid).username, score: 0, correct: 0, answered: 0, time: 0, streak: 0 }); pushStatus(); }
-    emit(uid, 'event:joined', { id: ev.id, phase: ev.phase, startsAt: ev.startsAt, startsIn: Math.max(0, ev.startsAt - Date.now()), players: ev.parts.size, q: ev.q && Date.now() < ev.q.endsAt ? publicQ(ev.q) : null });
+    emit(uid, 'event:joined', { id: ev.id, phase: ev.phase, startsAt: ev.startsAt, startsIn: Math.max(0, ev.startsAt - Date.now()), players: ev.parts.size, q: ev.q && Date.now() < ev.q.endsAt ? publicQ(ev.q, uid) : null });
   }
-  const publicQ = (qq) => ({ n: qq.n, total: ev.total, text: qq.text, options: qq.options, endsAt: qq.endsAt, left: Math.max(0, qq.endsAt - Date.now()), ms: Q_MS, answered: false });
+  const publicQ = (qq, uid) => ({ n: qq.n, total: ev.total, text: qq.text, options: qq.options, endsAt: qq.endsAt, left: Math.max(0, qq.endsAt - Date.now()), ms: Q_MS, answered: false, tie: !!qq.tie, spectator: !!(qq.tie && uid && !ev.tie?.has(uid)) });
 
   function answer(uid, { n, choice } = {}) {
     if (!ev || ev.phase !== 'running' || !ev.q || ev.q.n !== n || !Number.isInteger(choice) || choice < 0 || choice > 3) return;
     const p = ev.parts.get(uid);
     const now = Date.now();
     if (!p || !inHall(uid) || ev.q.answers.has(uid) || now > ev.q.endsAt + 350) return;
+    if (ev.tie && !ev.tie.has(uid)) return; // desempate: só quem empatou responde
     const right = choice === ev.q.answer;
     const took = Math.min(Q_MS, now - ev.q.startedAt);
+    if (ev.tie) { p.time += took; ev.q.answers.set(uid, { choice, gained: 0, right }); emit(uid, 'event:answered', { n }); return; }
     let gained = 0;
     if (right) { p.streak++; gained = 100 + Math.round(100 * (1 - took / Q_MS)) + Math.min(p.streak - 1, 5) * 10; p.correct++; } else p.streak = 0;
     p.score += gained; p.answered++; p.time += took;
@@ -72,18 +72,14 @@ module.exports = function createEvents({ io, prisma, socketByUser, meByUser, dur
   }
 
   // ---------------------------------------------------------------- ranking e prêmios
-  const rank = (e) => [...e.parts.entries()].map(([uid, p]) => ({ uid, ...p })).sort((a, b) => b.score - a.score || a.time - b.time);
+  const rank = (e) => [...e.parts.entries()].map(([uid, p]) => ({ uid, ...p })).sort((a, b) => (b.uid === e.winner) - (a.uid === e.winner) || b.score - a.score || a.time - b.time);
 
-  function prizeFor(list, i, total) {
+  function prizeFor(list, i, e) {
     const r = list[i];
     let prize = null;
-    if (list.length >= 2 && i < 3 && r.score > 0) prize = { ...PRIZES[i + 1] };
+    if (list.length >= 2 && i < 3 && (r.score > 0 || (i === 0 && e.hadTie && r.time > 0))) prize = { ...PRIZES[i + 1] };
     else if (r.correct >= 5) prize = { ...PRIZES.good };
     else if (r.answered > 0) prize = { ...PRIZES.any };
-    if (prize?.masterballs) { // Master Ball: só com 3+ jogadores e sem ter ganhado outra recentemente
-      const recent = Date.now() - (lastMaster.get(r.uid) || 0) < MASTER_COOLDOWN_MS;
-      if (list.length < 3 || recent) { prize.ultraballs = (prize.ultraballs || 0) + 2; delete prize.masterballs; }
-    }
     return prize;
   }
 
@@ -93,14 +89,13 @@ module.exports = function createEvents({ io, prisma, socketByUser, meByUser, dur
     for (const [k, n] of Object.entries(prize)) data[k] = { increment: n };
     const u = await durable('evento-premio', () => prisma.user.update({ where: { id: uid }, data }));
     if (u) emit(uid, 'inventory', { poke: u.pokeballs, great: u.greatballs, ultra: u.ultraballs, master: u.masterballs });
-    if (prize.masterballs) lastMaster.set(uid, Date.now());
   }
 
   async function finish(e) {
     e.phase = 'results';
     e.q = null;
     const list = rank(e);
-    const prizes = list.map((r, i) => prizeFor(list, i, list.length));
+    const prizes = list.map((r, i) => prizeFor(list, i, e));
     await Promise.all(list.map((r, i) => grant(r.uid, prizes[i])));
     const top = list.slice(0, 10).map((r) => ({ name: r.name, score: r.score, correct: r.correct }));
     list.forEach((r, i) => emit(r.uid, 'event:end', { id: e.id, top, total: e.total, you: { rank: i + 1, of: list.length, score: r.score, correct: r.correct, prize: prizes[i] } }));
@@ -120,7 +115,7 @@ module.exports = function createEvents({ io, prisma, socketByUser, meByUser, dur
       const startedAt = Date.now();
       e.q = { n: i + 1, text: qq.text, options: qq.options, answer: qq.answer, startedAt, endsAt: startedAt + Q_MS, answers: new Map() };
       pushStatus();
-      hallOf(e).forEach((uid) => emit(uid, 'event:question', publicQ(e.q)));
+      hallOf(e).forEach((uid) => emit(uid, 'event:question', publicQ(e.q, uid)));
       await sleepUntil(e, Q_MS + 250);
       if (e.cancelled) return false;
       const list = rank(e);
@@ -132,7 +127,47 @@ module.exports = function createEvents({ io, prisma, socketByUser, meByUser, dur
       }
       if (i < qs.length - 1) await sleepUntil(e, REVEAL_MS);
     }
+    if (e.cancelled) return false;
+    await tiebreak(e);
     return !e.cancelled;
+  }
+
+  // Desempate: se o 1º lugar está empatado, novas perguntas SÓ para os empatados (morte súbita).
+  // Quem erra/não responde sai, se pelo menos um acertou. Sem vencedor em 8 rodadas: vence quem foi mais rápido.
+  async function tiebreak(e) {
+    const list = rank(e);
+    if (list.length < 2) return;
+    let tied = new Set(list.filter((r) => r.score === list[0].score).map((r) => r.uid));
+    if (tied.size < 2) return;
+    const nameOf = (u) => e.parts.get(u).name;
+    e.hadTie = true;
+    for (let round = 1; round <= 8 && tied.size > 1 && !e.cancelled; round++) {
+      const names = [...tied].map(nameOf);
+      hallOf(e).forEach((uid) => emit(uid, 'event:tie', { round, names }));
+      io.emit('notice', { msg: `⚔ Empate em 1º no quiz! Desempate: ${names.join(', ')}` });
+      await sleepUntil(e, FAST ? 400 : 4000);
+      if (e.cancelled) return;
+      const qq = makeQuiz(1)[0];
+      const startedAt = Date.now();
+      e.tie = tied;
+      e.q = { n: e.total + round, tie: true, text: qq.text, options: qq.options, answer: qq.answer, startedAt, endsAt: startedAt + Q_MS, answers: new Map() };
+      hallOf(e).forEach((uid) => emit(uid, 'event:question', publicQ(e.q, uid)));
+      await sleepUntil(e, Q_MS + 250);
+      if (e.cancelled) return;
+      const right = [...tied].filter((u) => e.q.answers.get(u)?.right);
+      if (right.length >= 1 && right.length < tied.size) tied = new Set(right);
+      const list2 = rank(e);
+      const top = list2.slice(0, 5).map((r) => ({ name: r.name, score: r.score }));
+      for (const [uid] of e.parts) {
+        const a = e.q.answers.get(uid);
+        emit(uid, 'event:reveal', { n: e.q.n, tie: true, correct: qq.answer, choice: a ? a.choice : null, gained: 0, score: e.parts.get(uid).score, rank: list2.findIndex((r) => r.uid === uid) + 1, of: list2.length, top, left: [...tied].map(nameOf) });
+      }
+      await sleepUntil(e, REVEAL_MS);
+    }
+    e.tie = null;
+    if (tied.size > 1) { // ainda empatados: o mais rápido nas respostas leva
+      e.winner = [...tied].sort((a, b) => e.parts.get(a).time - e.parts.get(b).time)[0];
+    } else e.winner = [...tied][0];
   }
 
   // ---------------------------------------------------------------- ciclo de vida

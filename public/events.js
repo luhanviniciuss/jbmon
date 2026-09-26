@@ -42,15 +42,15 @@ const Events = (() => {
         '<ol class="qz-top">' + end.top.slice(0, 5).map((r, i) => '<li' + (r.name === $('hudName').textContent ? ' class="me"' : '') + '><span>' + (i + 1) + '</span><b>' + esc(r.name) + '</b><em>' + r.score + '</em></li>').join('') + '</ol></div>';
     } else if (q && now() < q.endLocal && !reveal) {
       const left = q.endLocal - now(), pct = Math.max(0, Math.min(100, (left / q.ms) * 100));
-      html = '<div class="qz-top-row"><span>Pergunta ' + q.n + '/' + q.total + '</span><span class="qz-time' + (left < 5000 ? ' hot' : '') + '">⏱ ' + Math.ceil(left / 1000) + 's</span></div><div class="qz-bar"><i style="width:' + pct + '%"></i></div>' +
+      html = '<div class="qz-top-row"><span>' + (q.tie ? '⚔ DESEMPATE' : 'Pergunta ' + q.n + '/' + q.total) + '</span><span class="qz-time' + (left < 5000 ? ' hot' : '') + '">⏱ ' + Math.ceil(left / 1000) + 's</span></div><div class="qz-bar"><i style="width:' + pct + '%"></i></div>' +
         '<h3 class="qz-q">' + esc(q.text) + '</h3><div class="qz-opts">' +
-        q.options.map((o, i) => '<button class="qz-opt' + (mine === i ? ' sel' : '') + '" data-i="' + i + '"' + (mine !== null ? ' disabled' : '') + '><b>' + OPT[i] + '</b><span>' + esc(o) + '</span></button>').join('') + '</div>' +
-        '<p class="qz-hint">' + (mine !== null ? '✔ Resposta enviada! Aguarde o tempo acabar…' : 'Quanto mais rápido, mais pontos!') + (last ? ' · ' + last.score + ' pts' : '') + '</p>';
+        q.options.map((o, i) => '<button class="qz-opt' + (mine === i ? ' sel' : '') + '" data-i="' + i + '"' + (mine !== null || q.spectator ? ' disabled' : '') + '><b>' + OPT[i] + '</b><span>' + esc(o) + '</span></button>').join('') + '</div>' +
+        '<p class="qz-hint">' + (q.spectator ? '👀 Desempate entre os empatados em 1º. Você assiste!' : mine !== null ? '✔ Resposta enviada! Aguarde o tempo acabar…' : 'Quanto mais rápido, mais pontos!') + (last ? ' · ' + last.score + ' pts' : '') + '</p>';
     } else if (reveal && q) {
       const ok = reveal.choice === reveal.correct;
-      html = '<div class="qz-top-row"><span>Pergunta ' + reveal.n + '/' + q.total + '</span><span>' + reveal.score + ' pts · ' + reveal.rank + 'º/' + reveal.of + '</span></div><h3 class="qz-q">' + esc(q.text) + '</h3><div class="qz-opts">' +
+      html = '<div class="qz-top-row"><span>' + (reveal.tie ? '⚔ DESEMPATE' : 'Pergunta ' + reveal.n + '/' + q.total) + '</span><span>' + reveal.score + ' pts · ' + reveal.rank + 'º/' + reveal.of + '</span></div><h3 class="qz-q">' + esc(q.text) + '</h3><div class="qz-opts">' +
         q.options.map((o, i) => '<div class="qz-opt ' + (i === reveal.correct ? 'right' : i === reveal.choice ? 'wrong' : 'dim') + '"><b>' + OPT[i] + '</b><span>' + esc(o) + '</span></div>').join('') + '</div>' +
-        '<p class="qz-hint ' + (ok ? 'good' : 'bad') + '">' + (reveal.choice === null ? '⏰ Tempo esgotado!' : ok ? '✔ Acertou! +' + reveal.gained + ' pontos' : '✖ Errou!') + '</p>' +
+        '<p class="qz-hint ' + (ok ? 'good' : 'bad') + '">' + (reveal.tie ? (reveal.left.length > 1 ? '⚔ Seguem no desempate: ' + reveal.left.map(esc).join(', ') : '🏆 Desempate decidido: ' + esc(reveal.left[0])) : reveal.choice === null ? '⏰ Tempo esgotado!' : ok ? '✔ Acertou! +' + reveal.gained + ' pontos' : '✖ Errou!') + '</p>' +
         '<ol class="qz-top mini">' + reveal.top.map((r, i) => '<li><span>' + (i + 1) + '</span><b>' + esc(r.name) + '</b><em>' + r.score + '</em></li>').join('') + '</ol>';
     } else if (status && status.phase === 'lobby') {
       html = '<div class="qz-wait"><div class="qz-ico">' + status.icon + '</div><h3>' + esc(status.name) + '</h3><p class="qz-count">' + fmt(lobbyLeft()) + '</p><p>' + status.players + ' jogador' + (status.players === 1 ? '' : 'es') + ' no salão. Fique aqui para participar!</p></div>';
@@ -87,6 +87,7 @@ const Events = (() => {
     });
     sock.on('event:question', (x) => { end = null; reveal = null; mine = null; q = { ...x, endLocal: now() + x.left }; draw(); });
     sock.on('event:answered', () => draw());
+    sock.on('event:tie', (t) => { toast('⚔ Empate em 1º! Desempate: ' + t.names.join(', ')); });
     sock.on('event:reveal', (r) => { reveal = r; last = { score: r.score, rank: r.rank, of: r.of }; draw(); });
     sock.on('event:end', (e) => { end = e; q = null; reveal = null; mine = null; draw(); });
     sock.on('event:cancel', () => { q = null; reveal = null; mine = null; end = null; toast('O evento foi cancelado.'); draw(); });
@@ -105,7 +106,7 @@ const Events = (() => {
 
   $('quizBody').addEventListener('click', (e) => {
     const b = e.target.closest('.qz-opt[data-i]');
-    if (!b || !q || mine !== null || now() >= q.endLocal) return;
+    if (!b || !q || q.spectator || mine !== null || now() >= q.endLocal) return;
     mine = +b.dataset.i;
     socket()?.emit('event:answer', { n: q.n, choice: mine });
     draw();

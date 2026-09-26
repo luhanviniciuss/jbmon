@@ -38,6 +38,7 @@
       <button class="chip glass boss-chip" id="bossChip" hidden></button>
       <button class="chip glass queue-chip" id="queueChip" hidden></button>
       <button class="chip glass quest-chip" id="questChip" hidden title="Diário de Missões"></button>
+      <button class="chip glass event-chip" id="eventChip" hidden title="Evento em andamento"></button>
       <button class="chip glass voice-chip" id="voiceChip" hidden></button>
     </div>
 
@@ -135,9 +136,15 @@
   <!-- Painel de administração (só para contas admin) -->
   <aside id="admin" class="drawer glass" aria-hidden="true">
     <header><h2>🛡 Administração</h2><button class="close" id="closeAdmin" aria-label="Fechar">✕</button></header>
-    <nav class="atabs"><button data-tab="players" class="active">Jogadores</button><button data-tab="spawn">Spawn</button><button data-tab="give">Dar</button><button data-tab="sys">Sistema</button></nav>
+    <nav class="atabs"><button data-tab="players" class="active">Jogadores</button><button data-tab="spawn">Spawn</button><button data-tab="give">Dar</button><button data-tab="events">Eventos</button><button data-tab="sys">Sistema</button></nav>
     <div id="adminBody" class="list"></div>
   </aside>
+
+  <!-- Quiz / eventos (dentro do Salão de Eventos) -->
+  <div id="quiz" class="quiz glass" hidden>
+    <button class="quiz-hide" id="quizHide" aria-label="Recolher ou expandir">▾</button>
+    <div id="quizBody"></div>
+  </div>
 
   <!-- Batalha -->
   <div id="battle" class="battle" hidden>
@@ -237,12 +244,14 @@
   <script src="/lab.js"></script>
   <script src="/gym.js"></script>
   <script src="/prof.js"></script>
+  <script src="/hall.js"></script>
   <script src="/game.js"></script>
   <script src="/fx.js"></script>
   <script src="/battle.js"></script>
   <script src="/arena.js"></script>
   <script src="/dex.js"></script>
   <script src="/story.js"></script>
+  <script src="/events.js"></script>
   <script src="/settings.js"></script>
   <script src="/admin.js"></script>
 </body>

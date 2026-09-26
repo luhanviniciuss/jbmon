@@ -110,3 +110,13 @@ model Clan {
   created_at DateTime @default(now())
   members    User[]
 }
+
+// Histórico dos eventos (quiz etc.): quando rolou, quantos jogaram, quem ganhou e o top 10
+model EventLog {
+  id         Int      @id @default(autoincrement())
+  type       String
+  started_at DateTime @default(now())
+  players    Int      @default(0)
+  winner     String   @default("")
+  data       String   @default("")
+}

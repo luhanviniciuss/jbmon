@@ -5,6 +5,8 @@ const Admin = (() => {
   let st = null; // /state: jogadores online + estatísticas
   let users = null; // /users?q=: contas encontradas na busca
   let logRows = null;
+  let evsAt = 0, evLobbyVal = 0;
+  let evs = null; // /events: tipos, evento atual, agendamento e histórico
   let q = '';
   let openRow = null; // jogador com o menu de ações aberto
   let form = null; // { action: 'mute'|'ban', username } formulário de punição aberto
@@ -96,9 +98,23 @@ const Admin = (() => {
       '<div class="section-title">Auditoria (últimas ações)</div>' + (log || '<p class="empty">Sem registros.</p>');
   }
 
+  function eventsHtml() {
+    if (!evs) return '<p class="empty">Carregando…</p>';
+    const cur = evs.current;
+    const now = cur ? '<div class="ev-now"><b>' + esc(cur.icon + ' ' + cur.name) + '</b><span>' + (cur.phase === 'lobby' ? 'Inscrições abertas · abre em ' + Math.max(0, Math.round((cur.startsIn - (Date.now() - evsAt)) / 1000)) + ' s' : cur.phase === 'running' ? 'Em andamento ' + cur.n + '/' + cur.total : 'Encerrando') + ' · ' + cur.players + ' no salão</span><button class="ab danger" data-a="evCancel">⏹ Cancelar evento</button></div>' : '<p class="hintline">Nenhum evento em andamento.</p>';
+    const auto = evs.auto;
+    const types = evs.types.map((t) => '<div class="ev-type"><div><b>' + esc(t.icon + ' ' + t.name) + '</b><small>' + esc(t.desc) + '</small></div><button class="ab" data-a="evStart" data-t="' + esc(t.id) + '"' + (cur ? ' disabled' : '') + '>▶ Iniciar agora</button></div>').join('');
+    const recent = evs.recent.map((r) => '<div class="alog"><span>' + fmtDate(r.at) + '</span> <b>' + esc(r.type) + '</b> · ' + r.players + ' jogador(es) · 🏆 ' + esc(r.winner || '—') + '</div>').join('');
+    return '<div class="section-title">Agora</div>' + now +
+      '<div class="section-title">Agendamento automático</div><p class="hintline">O quiz roda sozinho de ' + auto.everyMin + ' em ' + auto.everyMin + ' minutos.' + (auto.enabled && auto.nextAt ? ' Próximo: ' + fmtDate(auto.nextAt) + '.' : '') + '</p><button class="ab ' + (auto.enabled ? 'danger' : 'ok') + '" data-a="evAuto">' + (auto.enabled ? '⏸ Desligar automático' : '▶ Ligar automático') + '</button>' +
+      '<div class="section-title">Iniciar evento</div><label class="al">Abertura do salão (segundos)<input id="evLobby" class="af" type="number" inputmode="numeric" min="10" max="900" value="' + (evLobbyVal || 60) + '" /></label>' + types +
+      '<p class="hintline">Todos recebem o aviso; quem estiver no Salão de Eventos (Cidade, casa da direita) participa.</p>' +
+      '<div class="section-title">Últimos eventos</div>' + (recent || '<p class="empty">Nenhum evento ainda.</p>');
+  }
+
   function render() {
     const body = $('adminBody');
-    body.innerHTML = tab === 'players' ? playersHtml() : tab === 'spawn' ? spawnHtml() : tab === 'give' ? giveHtml() : sysHtml();
+    body.innerHTML = tab === 'players' ? playersHtml() : tab === 'spawn' ? spawnHtml() : tab === 'give' ? giveHtml() : tab === 'events' ? eventsHtml() : sysHtml();
     document.querySelectorAll('#admin .atabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
     if (tab === 'spawn') { bindPicker('sp'); bindPicker('bs', true); $('spWhere').addEventListener('change', () => ($('spXY').hidden = $('spWhere').value !== 'xy')); }
     if (tab === 'give') bindPicker('gv');
@@ -113,9 +129,10 @@ const Admin = (() => {
       st = await api('GET', '/state');
       if (q) users = await api('GET', '/users?q=' + encodeURIComponent(q));
       if (tab === 'sys') logRows = await api('GET', '/log');
+      if (tab === 'events') { evs = await api('GET', '/events'); evsAt = Date.now(); }
     } catch (e) { toast('⚠ ' + e.message); return; }
     // Abas de formulário (Spawn/Dar) não são redesenhadas: senão os campos preenchidos (jogador, espécie, nível) se perderiam a cada ação
-    if (!fieldFocused() && (tab === 'players' || tab === 'sys')) render();
+    if (!fieldFocused() && (tab === 'players' || tab === 'sys' || tab === 'events')) render();
   }
 
   // ---------------- ações (delegação de eventos) ----------------
@@ -155,6 +172,9 @@ const Admin = (() => {
       case 'giveItem': return act('/give-item', { username: $('gvU').value.trim(), item: $('gvItem').value, amount: num('gvN', 1) }, 'Item entregue');
       case 'healGv': return act('/heal', { username: $('gvU').value.trim() }, 'Equipe curada');
       case 'announce': return act('/announce', { text: $('anTxt').value }, 'Aviso enviado').then(() => ($('anTxt') && ($('anTxt').value = '')));
+      case 'evStart': evLobbyVal = num('evLobby', 60); return act('/events/start', { type: b.dataset.t, lobbySec: evLobbyVal }, 'Evento iniciado');
+      case 'evCancel': return act('/events/cancel', {}, 'Evento cancelado');
+      case 'evAuto': return act('/events/auto', { enabled: !evs?.auto.enabled }, 'Agendamento atualizado');
       case 'tpxy': return act('/teleport', { mode: 'xy', x: num('tpX', 50), y: num('tpY', 50) }, 'Teletransportado');
     }
   }
@@ -166,7 +186,7 @@ const Admin = (() => {
     if (!on) return;
     ['drawer', 'bag', 'group'].forEach((id) => $(id).classList.remove('open'));
     refresh();
-    timer = setInterval(() => { if ($('admin').classList.contains('open') && (tab === 'players' || tab === 'sys')) refresh(); }, 4000);
+    timer = setInterval(() => { if ($('admin').classList.contains('open') && (tab === 'players' || tab === 'sys' || tab === 'events')) refresh(); }, 4000);
   }
 
   function init() {

@@ -155,6 +155,28 @@ module.exports = function registerAdmin(ctx) {
     res.json({ ok: true, removed: n });
   });
 
+  // ---------------- eventos (quiz etc.): iniciar agora, cancelar e ligar/desligar o agendamento automático ----------------
+  route('get', '/events', async (req, res) => res.json(await ctx.events.summary()));
+  route('post', '/events/start', async (req, res) => {
+    const type = str(req.body.type, 20);
+    const lobby = int(req.body.lobbySec, 10, 900) || 120;
+    const r = ctx.events.start(type, { by: req.admin.username, lobbyMs: lobby * 1000 });
+    if (r.error) return res.status(409).json({ error: r.error });
+    await audit(req.admin, 'evento-iniciar', type, { lobby });
+    res.json({ ok: true });
+  });
+  route('post', '/events/cancel', async (req, res) => {
+    const r = ctx.events.cancel();
+    if (r.error) return res.status(409).json({ error: r.error });
+    await audit(req.admin, 'evento-cancelar', '');
+    res.json({ ok: true });
+  });
+  route('post', '/events/auto', async (req, res) => {
+    await ctx.events.setAuto(!!req.body.enabled);
+    await audit(req.admin, 'evento-automatico', req.body.enabled ? 'ligado' : 'desligado');
+    res.json({ ok: true });
+  });
+
   route('post', '/boss', async (req, res) => {
     const species_id = req.body.species_id == null ? null : int(req.body.species_id, 1, 999);
     if (req.body.species_id != null && (!species_id || !SPECIES[species_id])) return res.status(400).json({ error: 'Espécie inválida' });

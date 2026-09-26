@@ -488,6 +488,8 @@ class WorldScene extends Phaser.Scene {
     this.socket.on('lab:entered', () => openInterior('Lab'));
     this.socket.on('gym:entered', () => openInterior('Gym'));
     this.socket.on('prof:entered', () => openInterior('Prof'));
+    this.socket.on('events:entered', () => openInterior('Hall'));
+    this.socket.on('events:exited', () => this.closeInterior());
     this.socket.on('prof:exited', () => this.closeInterior());
     this.socket.on('lab:exited', () => this.closeInterior());
     this.socket.on('gym:exited', () => this.closeInterior());
@@ -675,6 +677,11 @@ class WorldScene extends Phaser.Scene {
       const P = PROF_HOUSE, px = (P.x0 + (P.x1 - P.x0 + 1) / 2) * TILE;
       this.txt(px, P.y0 * TILE - 18, '🎓 Prof. Carvalho', '12px', '#fff', '#2c3f7acc');
       this.txt(px, (P.doorY + 1) * TILE + 14, '↑ Missões e dicas', '10px', '#fff', '#0b1020aa');
+    }
+    { // Salão de Eventos (quiz e outros eventos)
+      const E = EVENT_HOUSE, ex = (E.x0 + (E.x1 - E.x0 + 1) / 2) * TILE;
+      this.txt(ex, E.y0 * TILE - 18, '🎉 Salão de Eventos', '12px', '#fff', '#7a2c6bcc');
+      this.txt(ex, (E.doorY + 1) * TILE + 14, '↑ Quiz e eventos', '10px', '#fff', '#0b1020aa');
     }
     const fg = this.reg(this.add.graphics().setDepth(3));                           // borda de pedra da fonte
     fg.lineStyle(5, 0x8f96a8).strokeRoundedRect(48 * TILE - 3, 53 * TILE - 3, 5 * TILE + 6, 2 * TILE + 6, 8);
@@ -1162,7 +1169,7 @@ class WorldScene extends Phaser.Scene {
     // Portas: pisar no tile da porta pede a entrada (laboratório do Centro Pokémon, ou ginásio na Rota). O servidor confere.
     if (!inBattle && !this.inLab && !this.labPending) {
       const ptx = Math.floor(p.x / TILE), pty = Math.floor(p.y / TILE), lb = LABS[WORLD_ID];
-      const ev = lb && ptx === lb.doorX && pty === lb.doorY ? 'lab:enter' : WORLD_ID === 'route' && ptx === GYM.doorX && pty === GYM.doorY ? 'gym:enter' : WORLD_ID === 'town' && ptx === PROF_HOUSE.doorX && pty === PROF_HOUSE.doorY ? 'prof:enter' : null;
+      const ev = lb && ptx === lb.doorX && pty === lb.doorY ? 'lab:enter' : WORLD_ID === 'route' && ptx === GYM.doorX && pty === GYM.doorY ? 'gym:enter' : WORLD_ID === 'town' && ptx === PROF_HOUSE.doorX && pty === PROF_HOUSE.doorY ? 'prof:enter' : WORLD_ID === 'town' && ptx === EVENT_HOUSE.doorX && pty === EVENT_HOUSE.doorY ? 'events:enter' : null;
       if (ev) {
         this.labPending = true;
         this.socket.emit(ev);
@@ -1196,6 +1203,6 @@ function startGame() {
     physics: { default: 'arcade' },
     loader: { crossOrigin: 'anonymous' },
     scale: { mode: Phaser.Scale.RESIZE },
-    scene: [WorldScene, LabScene, GymScene, ProfScene],
+    scene: [WorldScene, LabScene, GymScene, ProfScene, HallScene],
   });
 }

@@ -107,6 +107,16 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 - **Dicas para quem chega**: na primeira vez, 11 cartões (movimento, batalhas, captura, equipe, cura, craft, mundos, lendários/grupos, arena/clãs, chat, Pokédex/missões) com **"Pular dicas"** a qualquer momento (fica salvo). Dá para **rever** no Diário, em ⚙ ou com o Professor.
 - A casa do Professor é um interior como o laboratório (`ProfScene`, `public/prof.js`): você anda dentro, toca no Professor ou na mesa dos iniciais e conversa.
 
+## Eventos (Quiz Pokémon)
+
+- Os eventos acontecem no **Salão de Eventos**: a casa da **direita** da **Cidade** (espelho da casa do Professor; o ginásio leva à Cidade). É um interior próprio (`HallScene`, `public/hall.js`) com palco, telão e poltronas.
+- **Quiz Pokémon**: 120 s de lobby (quem entra no salão participa), depois **10 perguntas de 15 s** com 4 alternativas. Acerto = 100 pontos + até 100 pelo tempo + bônus de sequência. As perguntas são **sorteadas a cada quiz** (tipos, evoluções, Pokédex, tabela de tipos, lendários e curiosidades sobre o jogo, em `server/quiz-bank.js`).
+- **Tudo no servidor**: a resposta certa só é enviada na revelação, cada jogador responde uma vez por pergunta, e só responde quem está dentro do salão.
+- **Prêmios** (Ultra/Master Ball só saem em eventos): 1º Master Ball + 3 Ultra + Bolotas + Fragmentos; 2º e 3º Ultra Balls; 5+ acertos Great Balls; participar dá Bolotas. Master Ball só com 3+ jogadores e no máximo 1 a cada 6 h por pessoa. Com menos de 2 jogadores não há prêmio de colocação.
+- **Automático de 20 em 20 minutos** (ligado por padrão; persistido). Todos recebem o aviso e o chip "❓ Quiz · abre em…" no HUD.
+- **Painel de administração → aba Eventos**: iniciar **qualquer evento** na hora (com tempo de abertura), cancelar o que está rodando, ligar/desligar o agendamento automático e ver os últimos eventos (tabela `EventLog`). Rotas: `GET /api/admin/events`, `POST /api/admin/events/start | cancel | auto`.
+- **Novo evento = uma entrada em `types`** de `server/events.js` (`{ name, icon, desc, run(ev) }`); ele já aparece no painel admin e no agendamento.
+
 ## Ginásio e mundos extras
 - **Ginásio** (Rota, 20 tiles a leste do Centro Pokémon, por uma estrada livre de grama alta): pisar na porta leva ao **salão do ginásio** (`GymScene`, `public/gym.js`), com três **portais**: **Cidade**, **Bioma de Gelo** e **Vulcão**. Caminhe até um portal para viajar; a porta verde de baixo volta à Rota.
 - **Mundos** (cada um com 100x100 tiles, gerados por `generateMap(mundo)` em `public/map.js`, iguais no servidor e no cliente):

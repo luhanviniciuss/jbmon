@@ -10,6 +10,7 @@ const LAB = { x0: 48, x1: 52, y0: 45, y1: 47, doorX: 50, doorY: 47 };        // 
 const GYM = { x0: 68, x1: 72, y0: 45, y1: 47, doorX: 70, doorY: 47 };        // Ginásio: hub de portais (20 tiles a leste do Centro Pokémon)
 const TOWN_LAB = { x0: 48, x1: 52, y0: 40, y1: 42, doorX: 50, doorY: 42 };   // Centro Pokémon da Cidade
 const PROF_HOUSE = { x0: 31, x1: 35, y0: 47, y1: 51, doorX: 33, doorY: 51 };  // casa da esquerda da Cidade: Professor Carvalho (Modo História e dicas)
+const EVENT_HOUSE = { x0: 64, x1: 68, y0: 47, y1: 51, doorX: 66, doorY: 51 }; // casa da direita da Cidade: Salão de Eventos (quiz etc.)
 const LABS = { route: LAB, town: TOWN_LAB };
 const PORTAL = { tx: 46, ty: 49 };                                            // portal de volta ao ginásio (mundos extras), 4 tiles a oeste da chegada
 const ARRIVE = { x: 50.5 * TILE, y: 49.5 * TILE };                            // onde o jogador chega em cada mundo extra
@@ -107,6 +108,7 @@ function genTown() {
   for (let y = 53; y <= 54; y++) for (let x = 48; x <= 52; x++) data[y][x] = 2;   // fonte da praça
   stamp(data, TOWN_LAB);
   stamp(data, PROF_HOUSE); // a porta da casa do Professor é andável
+  stamp(data, EVENT_HOUSE); // e a do Salão de Eventos
   return data;
 }
 
@@ -114,4 +116,4 @@ function generateMap(world = 'route') {
   return world === 'ice' ? genIce() : world === 'lava' ? genLava() : world === 'town' ? genTown() : genRoute();
 }
 
-if (typeof module !== "undefined") module.exports = { MAP_W, MAP_H, TILE, PLAYER_SPEED, CLEAR_MIN, CLEAR_MAX, LAB, GYM, TOWN_LAB, LABS, PROF_HOUSE, TOWN_HOUSES, PORTAL, ARRIVE, GYM_EXIT, WORLDS, WORLD_IDS, generateMap };
+if (typeof module !== "undefined") module.exports = { MAP_W, MAP_H, TILE, PLAYER_SPEED, CLEAR_MIN, CLEAR_MAX, LAB, GYM, TOWN_LAB, LABS, PROF_HOUSE, EVENT_HOUSE, TOWN_HOUSES, PORTAL, ARRIVE, GYM_EXIT, WORLDS, WORLD_IDS, generateMap };

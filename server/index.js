@@ -6,7 +6,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Server } = require('socket.io');
 const { PrismaClient } = require('@prisma/client');
-const { MAP_W, TILE, PLAYER_SPEED, CLEAR_MIN, CLEAR_MAX, GYM, LABS, PROF_HOUSE, PORTAL, ARRIVE, GYM_EXIT, WORLDS, WORLD_IDS, generateMap } = require('../public/map.js');
+const { MAP_W, TILE, PLAYER_SPEED, CLEAR_MIN, CLEAR_MAX, GYM, LABS, PROF_HOUSE, EVENT_HOUSE, PORTAL, ARRIVE, GYM_EXIT, WORLDS, WORLD_IDS, generateMap } = require('../public/map.js');
 const createWorld = require('./world.js');
 const { SPECIES, WILD_TABLE, WATER_TABLE, calcStats, minLevel } = require('../public/species.js');
 const { BALLS, RECIPES } = require('../public/items.js');
@@ -20,6 +20,7 @@ const { biomeAt } = require('./biome.js');
 const createVoip = require('./voip.js');
 const createPokedex = require('./pokedex.js');
 const createStory = require('./story.js');
+const createEvents = require('./events.js');
 const registerAdmin = require('./admin.js');
 const { retry, durable, flushPending, pendingCount } = require('./durable.js');
 const { loadTeam, nextFreeSlot, partyOf } = require('./team.js');
@@ -268,6 +269,7 @@ const raidSys = createRaidSystem({
 });
 
 registerAdmin({
+  events: { start: (...a) => events.start(...a), cancel: () => events.cancel(), setAuto: (v) => events.setAuto(v), summary: () => events.summary() },
   afterGive: (uid) => refreshBuddy(uid),
   app, prisma, auth, moderation, io, socketByUser, meByUser, raidSys, teleportTo, nextFreeSlot, invOf, TILE,
   isBusy: (uid) => battlingUsers.has(uid),
@@ -291,6 +293,7 @@ const pvp = createPvp({
 const voip = createVoip({ socketByUser, groupInfo: raidSys.groupInfo });
 const pokedex = createPokedex({ app, prisma, auth, socketByUser, durable });
 const story = createStory({ prisma, socketByUser, meByUser, durable, nextFreeSlot, dexMark: (uid, sp, k) => pokedex.mark(uid, sp, k), onTeamChanged: (uid) => refreshBuddy(uid) });
+const events = createEvents({ io, prisma, socketByUser, meByUser, durable });
 const chat = createChat({ io, socketByUser, meByUser, groupMembers: raidSys.groupMembers, clanMembers: clans.clanMembersOnline, moderation });
 
 io.use(async (socket, next) => {
@@ -327,6 +330,7 @@ io.on('connection', (socket) => {
   refreshBuddy(u.id, true);
   pokedex.load(u.id);
   story.load(u.id);
+  events.bind(socket, u.id);
 
   socket.emit('players:init', {
     self: me,
@@ -431,7 +435,7 @@ io.on('connection', (socket) => {
     if (labTimer) socket.emit('notice', { msg: 'Cura cancelada: você saiu do laboratório.' });
     clearTimeout(labTimer);
     labTimer = null;
-    const ex = exitOf(kind === 'lab' ? LABS[me.world] : kind === 'prof' ? PROF_HOUSE : GYM);
+    const ex = exitOf(kind === 'lab' ? LABS[me.world] : kind === 'prof' ? PROF_HOUSE : kind === 'events' ? EVENT_HOUSE : GYM);
     me.hidden = false;
     me.inside = null;
     immuneUntil = Date.now() + IMMUNE_MS;
@@ -444,6 +448,8 @@ io.on('connection', (socket) => {
   socket.on('lab:exit', () => leaveInterior('lab', 'lab:exited'));
   socket.on('prof:enter', () => { if (me.world === 'town' && enterInterior('prof', PROF_HOUSE)) socket.emit('prof:entered'); });
   socket.on('prof:exit', () => leaveInterior('prof', 'prof:exited'));
+  socket.on('events:enter', () => { if (me.world === 'town' && enterInterior('events', EVENT_HOUSE)) { socket.emit('events:entered'); events.onEnter(u.id); } });
+  socket.on('events:exit', () => leaveInterior('events', 'events:exited'));
   socket.on('story:talk', () => story.talk(u.id));
   socket.on('story:starter', (sp) => { story.starter(u.id, Number(sp)); });
   socket.on('story:tips', (mode) => { if (['done', 'skip', 'reset'].includes(mode)) story.setTips(u.id, mode); });
@@ -609,6 +615,7 @@ async function main() {
   await tuneDatabase();
   console.log('Moderação: ' + (await moderation.load()) + ' punição(ões) ativa(s) carregada(s)');
   startBackups(prisma);
+  await events.init();
   server.listen(PORT, '0.0.0.0', () => console.log(`Servidor em http://localhost:${PORT}`));
 }
 main().catch((e) => {

@@ -266,6 +266,7 @@ const Arena = (() => {
       $('pvContinue').hidden = true;
       $('pvMy').dataset.sp = ''; $('pvFoe').dataset.sp = '';
       $('pvLabel').textContent = s.mode === 'clan' ? '🏰 Guerra de clãs' : s.mode === 'group' ? '👥 PvP de grupo' : '🥊 PvP solo';
+      Snd.music('pvp');
       $('pvResult').hidden = true;
       m = null;
       tick();
@@ -282,6 +283,8 @@ const Arena = (() => {
     for (const e of s.log) {
       msg(e.msg);
       if (e.atk && !first) {
+        Snd.sfx(e.eff === 0 ? 'hitImmune' : e.eff > 1 ? 'hitSuper' : e.eff < 1 ? 'hitWeak' : 'hit');
+        if (/crítico/.test(e.msg) || e.atk.power) Snd.sfx('crit');
         const mineAtt = e.atk.by === 'me';
         await Fx.attack($('pvFx'), e.atk, $(mineAtt ? 'pvMy' : 'pvFoe'), $(mineAtt ? 'pvFoe' : 'pvMy'), { crit: /crítico/.test(e.msg) || !!e.atk.power, dmg: +(/\(-(\d+)\)/.exec(e.msg)?.[1] || 0), eff: e.eff });
       }
@@ -294,6 +297,7 @@ const Arena = (() => {
     if (s.over) {
       lock(true);
       $('pvActions').hidden = true; $('pvSwitch').hidden = true;
+      Snd.sfx(s.won === 'you' ? 'win' : 'defeat');
       msg(s.won === 'you' ? '🏆 Você venceu o duelo!' : 'Você perdeu o duelo.');
       if (s.duels.some((d) => d.winner === null)) msg((s.won === 'you' ? '🏆 Duelo vencido!' : 'Duelo perdido.') + ' Aguardando os outros duelos…');
       return;
@@ -307,6 +311,7 @@ const Arena = (() => {
     queue = queue.then(async () => {
       await sleep(600);
       const box = $('pvResult');
+      Snd.sfx(e.result === 'win' ? 'win' : e.result === 'lose' ? 'defeat' : 'notice');
       const title = e.result === 'win' ? '🏆 Vitória!' : e.result === 'lose' ? 'Derrota' : 'Empate';
       box.className = 'pvres ' + e.result;
       box.innerHTML = '<h3>' + title + '</h3><p>Placar de duelos: ' + e.wins[0] + ' x ' + e.wins[1] + '</p>' +
@@ -326,6 +331,7 @@ const Arena = (() => {
     m = null;
     inBattle = false;
     chatBattle(false);
+    Snd.music(window.worldMusic());
     if (isOpen()) render();
   }
 

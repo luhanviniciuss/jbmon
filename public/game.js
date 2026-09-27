@@ -38,7 +38,10 @@ const speciesName = (id) => SPECIES[id]?.name || `#${id}`;
 const spriteUrl = (id) => `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`;
 
 // ---------- Utilidades de UI ----------
+function worldMusic() { return { route: 'route', town: 'town', ice: 'ice', lava: 'lava' }[WORLD_ID] || 'town'; }
+window.worldMusic = worldMusic;
 function toast(msg, big) {
+  if (big) Snd.sfx('notice');
   const el = document.createElement('div');
   el.className = 'toast' + (big ? ' big' : '');
   el.textContent = msg;
@@ -348,7 +351,7 @@ function addChat(m) {
     while (log.childElementCount > 120) log.firstElementChild.remove();
     if (nearBottom || m.fromId === MY_ID) log.scrollTop = log.scrollHeight;
   }
-  if (m.fromId !== MY_ID && !(isChatVisible() && ch === chat.tab)) { chat.unread[ch]++; updateChatBadges(); }
+  if (m.fromId !== MY_ID && !(isChatVisible() && ch === chat.tab)) { chat.unread[ch]++; updateChatBadges(); Snd.sfx('chat'); }
   if (m.ch !== 'w') window.worldScene?.showBubble(m);
 }
 function setChatTab(tab) {
@@ -600,6 +603,7 @@ class WorldScene extends Phaser.Scene {
   loadWorld(id) {
     const def = WORLDS[id] || WORLDS.route;
     WORLD_ID = def.id;
+    Snd.music(worldMusic());
     this.worldId = def.id;
     (this.mapObjs || []).forEach((o) => { this.tweens.killTweensOf(o); o.destroy(); });
     this.mapObjs = [];

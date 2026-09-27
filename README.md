@@ -19,7 +19,8 @@ public/lab.js           Cena do laboratório de cura (LabScene)
 public/gym.js           Cena do ginásio com portais (GymScene)
 server/world.js         Um mundo: mapa, Pokémon selvagens e respawn
 server/voip.js         Sinalização da voz do grupo (WebRTC)
-public/settings.js     Configurações e VoIP do grupo
+public/settings.js     Configurações, áudio (música/efeitos) e VoIP do grupo
+public/audio.js        Música e efeitos por síntese (Web Audio) + gritos dos Pokémon (PokeAPI cries)
 server/pvp.js          PvP solo, de grupo e guerra de clãs; rating (/api/pvp/*)
 public/arena.js        Arena: clã, desafios, ranking e tela da batalha PvP
 server/admin.js        API do painel de administração (/api/admin/*)
@@ -125,6 +126,14 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 - A vida do boss **cresce a cada jogador que entra** (a defesa dele é limitada para que dê para machucá-lo; quanto mais forte o seu time, mais dano) (a luta escala com a multidão). O boss revida a cada 2,5 s em jogadores aleatórios (nenhum golpe tira mais que 40% da vida do seu Pokémon) e a cada 4 ações usa o Poder Lendário em **todos**. Quando um Pokémon cai entra o próximo; sem Pokémon você fica fora, mas continua na luta.
 - **Prêmios ao derrotá-lo** (só para quem estava **em combate** e causou dano; quem saiu da luta ou nunca atacou não recebe): **até 5 Master Balls por rodada, 1 para cada um dos 5 que mais causaram dano**, mais Ultra Balls, Bolotas, Fragmentos e EXP proporcionais à contribuição (dano).
 - Painel admin → aba **Eventos**: iniciar/cancelar o Chefe de Mundo (o mesmo botão do Quiz). Automático de **2 em 2 horas** (junto do agendamento do quiz, com o mesmo liga/desliga). O histórico vai para `EventLog`. Código: `server/worldboss.js` (servidor autoritativo) e `public/wboss.js` (tela de combate).
+
+## Som (música e efeitos)
+
+- **Sem arquivo nenhum pra baixar**: a música e os efeitos são **sintetizados na hora** pelo navegador (Web Audio API, em `public/audio.js`). Ficam silenciosos até o primeiro toque/tecla (os navegadores bloqueiam áudio sem gesto do jogador).
+- **Música por contexto**, com troca suave: uma trilha para cada mundo (Rota, Cidade, Gelo, Vulcão), uma para batalha selvagem, uma dramática para chefes (chefe de cenário, raid do boss lendário e Chefe de Mundo), uma para PvP e uma para o Quiz no Salão de Eventos. Volta para a do mundo atual assim que a batalha/evento termina.
+- **Gritos de cada Pokémon**: tocam quando ele aparece (selvagem, o seu ao entrar em campo ou trocar, o chefe do cenário, o boss da raid e o Chefe de Mundo) e ao evoluir — vêm do repositório de gritos do PokeAPI (`PokeAPI/cries`), a mesma fonte já usada para os sprites.
+- **Efeitos**: golpe (normal, super efetivo, fraco, imune e crítico com sons diferentes), Pokébola (lançar, "chacoalhar", capturar, escapar), desmaio, subir de nível, evoluir, boss exausto, vitória/derrota, quiz certo/errado e contagem regressiva dos últimos 5 s, além de um clique padrão em qualquer botão do jogo.
+- **Configurações (⚙)**: liga/desliga e volume separados para música e efeitos, salvos no aparelho.
 
 ## Ginásio e mundos extras
 - **Ginásio** (Rota, 20 tiles a leste do Centro Pokémon, por uma estrada livre de grama alta): pisar na porta leva ao **salão do ginásio** (`GymScene`, `public/gym.js`), com três **portais**: **Cidade**, **Bioma de Gelo** e **Vulcão**. Caminhe até um portal para viajar; a porta verde de baixo volta à Rota.

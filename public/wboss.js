@@ -24,11 +24,14 @@ const WBoss = (() => {
     $('wbActs').hidden = false;
     $('wbLog').textContent = 'Ataque juntos! Quem causar mais dano leva as Master Balls.';
     $('wb').hidden = false;
+    Snd.music('boss');
+    setTimeout(() => Snd.cry(d.species_id), 300);
   }
   function close() {
     active = false;
     inBattle = false;
     $('wb').hidden = true;
+    Snd.music(window.worldMusic());
   }
 
   function render() {
@@ -87,6 +90,7 @@ const WBoss = (() => {
   const pulse = (el, cls) => { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); };
 
   function showEnd(e) {
+    Snd.sfx(e.result === 'won' ? 'win' : e.result === 'fled' ? 'defeat' : 'click');
     let html;
     if (e.result === 'won') {
       const y = e.you;
@@ -107,8 +111,8 @@ const WBoss = (() => {
   function bindSocket(sock) {
     sock.on('wboss:joined', open);
     sock.on('wboss:state', (s) => { if (!active) return; const prev = last; last = { ...s, at: now() }; Object.keys(ready).forEach((k) => { ready[k] = Math.max(ready[k], now() + s.you.cds[k]); if (s.you.cds[k] === 0 && ready[k] > now() + 60) ready[k] = now(); }); if (prev && s.you.mine.id === prev.you.mine.id && s.you.mine.hp < prev.you.mine.hp) pulse($('wb'), 'hurt'); render(); });
-    sock.on('wboss:hit', (h) => { if (!active) return; if (h.miss) return float('Errou!', 'miss'); float('-' + h.dmg.toLocaleString('pt-BR') + (h.crit ? '!' : ''), (h.crit ? 'crit ' : '') + (h.eff > 1 ? 'eff' : h.eff < 1 ? 'weak' : '')); pulse($('wbFoe'), 'hit'); });
-    sock.on('wboss:hurt', (h) => { if (active) pulse($('wbMyImg'), 'hit'); });
+    sock.on('wboss:hit', (h) => { if (!active) return; if (h.miss) return float('Errou!', 'miss'); Snd.sfx(h.eff === 0 ? 'hitImmune' : h.eff > 1 ? 'hitSuper' : h.eff < 1 ? 'hitWeak' : 'hit'); if (h.crit) Snd.sfx('crit'); float('-' + h.dmg.toLocaleString('pt-BR') + (h.crit ? '!' : ''), (h.crit ? 'crit ' : '') + (h.eff > 1 ? 'eff' : h.eff < 1 ? 'weak' : '')); pulse($('wbFoe'), 'hit'); });
+    sock.on('wboss:hurt', (h) => { if (!active) return; Snd.sfx('hit'); pulse($('wbMyImg'), 'hit'); });
     sock.on('wboss:left', close);
     sock.on('wboss:end', (e) => { if (active) showEnd(e); });
   }

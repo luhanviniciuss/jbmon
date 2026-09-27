@@ -88,11 +88,11 @@ const Events = (() => {
     sock.on('event:question', (x) => { end = null; reveal = null; mine = null; q = { ...x, endLocal: now() + x.left }; draw(); });
     sock.on('event:answered', () => draw());
     sock.on('event:tie', (t) => { toast('⚔ Empate em 1º! Desempate: ' + t.names.join(', ')); });
-    sock.on('event:reveal', (r) => { reveal = r; last = { score: r.score, rank: r.rank, of: r.of }; draw(); });
-    sock.on('event:end', (e) => { end = e; q = null; reveal = null; mine = null; draw(); });
+    sock.on('event:reveal', (r) => { Snd.sfx(r.choice === r.correct ? 'correct' : 'wrong'); reveal = r; last = { score: r.score, rank: r.rank, of: r.of }; draw(); });
+    sock.on('event:end', (e) => { Snd.sfx(e.you.rank === 1 ? 'win' : 'notice'); end = e; q = null; reveal = null; mine = null; draw(); });
     sock.on('event:cancel', () => { q = null; reveal = null; mine = null; end = null; toast('O evento foi cancelado.'); draw(); });
-    sock.on('events:entered', () => { inside = true; end = null; last = null; draw(); });
-    sock.on('events:exited', () => { inside = false; q = null; reveal = null; mine = null; end = null; draw(); });
+    sock.on('events:entered', () => { inside = true; end = null; last = null; Snd.music('quiz'); draw(); });
+    sock.on('events:exited', () => { inside = false; q = null; reveal = null; mine = null; end = null; Snd.music(window.worldMusic()); draw(); });
     sock.emit('event:sync'); // o status inicial pode ter chegado antes de ligarmos os ouvintes
   }
 
@@ -114,7 +114,11 @@ const Events = (() => {
   $('quizHide').addEventListener('click', () => $('quiz').classList.toggle('min'));
   $('eventChip').addEventListener('click', () => toast(status ? 'Vá ao Salão de Eventos: casa da direita na Cidade (mundo Cidade, pelo ginásio).' : 'Nenhum evento agora.'));
 
-  tick = setInterval(() => { if (status?.phase === 'lobby' || q) { updateChip(); if (inside) draw(); } else if (status) updateChip(); }, 500);
+  let lastTickSec = null;
+  tick = setInterval(() => {
+    if (q && !reveal) { const left = q.endLocal - now(); const sec = Math.ceil(left / 1000); if (left > 0 && left <= 5000 && sec !== lastTickSec) { lastTickSec = sec; Snd.sfx('tick'); } if (left > 5000) lastTickSec = null; }
+    if (status?.phase === 'lobby' || q) { updateChip(); if (inside) draw(); } else if (status) updateChip();
+  }, 500);
   return { screen };
 })();
 window.Events = Events; // a cena do salão (hall.js) lê o telão daqui

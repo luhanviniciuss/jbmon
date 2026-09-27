@@ -41,6 +41,11 @@ const Settings = (() => {
     const [st, txt] = status();
     const members = GROUP ? GROUP.members.filter((m) => m.id !== MY_ID) : [];
     $('settingsBody').innerHTML =
+      '<div class="section-title">Áudio</div>' +
+      '<label class="setrow"><span><b>Música</b><small>Trilha sonora do jogo (mundos, batalhas e eventos).</small></span><input type="checkbox" class="switch" id="setMusicOn"' + (Snd.prefs().musicOn ? ' checked' : '') + ' /></label>' +
+      '<label class="setrow col"><span><b>Volume da música</b></span><input type="range" id="setMusicVol" min="0" max="100" value="' + Math.round(Snd.prefs().musicVol * 100) + '" /></label>' +
+      '<label class="setrow"><span><b>Efeitos sonoros</b><small>Golpes, capturas, gritos dos Pokémon e avisos.</small></span><input type="checkbox" class="switch" id="setSfxOn"' + (Snd.prefs().sfxOn ? ' checked' : '') + ' /></label>' +
+      '<label class="setrow col"><span><b>Volume dos efeitos</b></span><input type="range" id="setSfxVol" min="0" max="100" value="' + Math.round(Snd.prefs().sfxVol * 100) + '" /></label>' +
       '<div class="section-title">Jogo</div>' +
       '<label class="setrow"><span><b>Pokémon ao meu lado</b><small>Seu primeiro Pokémon anda com você (e você vê os dos outros jogadores).</small></span><input type="checkbox" class="switch" id="setBuddy"' + (cfg.buddy ? ' checked' : '') + ' /></label>' +
       '<button class="btn small" id="setTips">📘 Rever as dicas do jogo</button>' +
@@ -55,6 +60,10 @@ const Settings = (() => {
         return '<div class="item vm"><span class="avatar sm" data-vid="' + m.id + '">' + esc(m.username[0]) + '</span><div><b>' + esc(m.username) + '</b></div><em>' + state + '</em></div>';
       }).join('') : '') +
       '<p class="hintline">O áudio vai direto entre os jogadores (não passa pelo servidor). O navegador pede permissão do microfone, e a voz só funciona em <b>HTTPS</b> (ou localhost). Se a conexão não fechar, alguma rede pode estar bloqueando conexões diretas.</p>';
+    $('setMusicOn').addEventListener('change', (e) => Snd.setMusicOn(e.target.checked));
+    $('setMusicVol').addEventListener('input', (e) => Snd.setMusicVol(e.target.value / 100));
+    $('setSfxOn').addEventListener('change', (e) => Snd.setSfxOn(e.target.checked));
+    $('setSfxVol').addEventListener('input', (e) => Snd.setSfxVol(e.target.value / 100));
     $('setTips').addEventListener('click', () => { open(false); Story.showTips(true); });
     $('setBuddy').addEventListener('change', (e) => { cfg.buddy = e.target.checked; save(); });
     $('setVoip').addEventListener('change', (e) => { cfg.voip = e.target.checked; save(); sync(); });

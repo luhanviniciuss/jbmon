@@ -124,6 +124,7 @@ const Battle = (() => {
 
   function hit(el) { el.classList.remove('hit'); void el.offsetWidth; el.classList.add('hit'); }
 
+  const FAINT_RE = /desmaiou/, LEVEL_RE = /subiu para o nível/;
   function resetField(m) {
     mode = m;
     active = true;
@@ -152,6 +153,9 @@ const Battle = (() => {
     setFoe(d.wild);
     setMine(d.mine);
     lock(true);
+    Snd.music(d.chief ? 'boss' : 'battle');
+    setTimeout(() => Snd.cry(d.wild.species_id), 280);
+    setTimeout(() => Snd.cry(d.mine.species_id), 750);
     const sp = SPECIES[d.wild.species_id];
     msg(`Um ${sp.name} selvagem apareceu! · ${Fx.BIOME_NAMES[d.biome] || 'Campo'}${sp.rarity === 'common' ? '' : ' ✦ ' + rarityOf(d.wild.species_id).label}`);
     if (d.chief) { // Modo História: chefe de cenário (não dá para capturar)
@@ -167,6 +171,8 @@ const Battle = (() => {
     for (const e of log) {
       if (e.atk) { // efeito visual do golpe (tipo vem do servidor)
         msg(e.msg);
+        Snd.sfx(e.eff === 0 ? 'hitImmune' : e.eff > 1 ? 'hitSuper' : e.eff < 1 ? 'hitWeak' : 'hit');
+        if (/crítico/.test(e.msg) || e.atk.power) Snd.sfx('crit');
         const mineAtt = e.atk.by === 'me';
         if (!(mode === 'raid' && !mineAtt && e.target !== MY_ID)) { // raid: golpe do boss em outro jogador não passa por aqui
           await Fx.attack($('fxCanvas'), e.atk, $(mineAtt ? 'myImg' : 'foeImg'), $(mineAtt ? 'foeImg' : 'myImg'), {
@@ -180,6 +186,9 @@ const Battle = (() => {
         void fx.offsetWidth;
         fx.classList.add('throw');
         msg(e.msg);
+        Snd.sfx('ballThrow');
+        setTimeout(() => Snd.sfx('ballShake'), 350);
+        setTimeout(() => Snd.sfx('ballShake'), 620);
         await sleep(950);
         $('foeImg').classList.add('in-ball');
         await sleep(600);
@@ -194,16 +203,22 @@ const Battle = (() => {
         const prevHp = parseFloat($('myHp').style.width || 100);
         const switched = st.mineId !== m.id;
         if (e.fx === 'evolve') { // silhueta brilhando e troca de sprite
+          Snd.sfx('evolve');
           $('myImg').classList.add('evolving');
           await sleep(1300);
           $('myImg').classList.remove('evolving');
           $('myImg').classList.add('evolved');
+          Snd.cry(m.species_id);
         }
         setMine(m, switched);
+        if (switched && e.fx !== 'evolve') Snd.cry(m.species_id);
         if (!switched && e.fx !== 'evolve' && parseFloat($('myHp').style.width) < prevHp - 0.1) hit($('myImg'));
       }
-      if (e.fx === 'exhaust') $('foeImg').classList.add('exhausted');
-      if (e.fx === 'escape') { $('foeImg').classList.remove('in-ball'); $('foeImg').classList.add('released'); }
+      if (e.fx === 'exhaust') { $('foeImg').classList.add('exhausted'); Snd.sfx('exhaust'); }
+      if (e.fx === 'escape') { $('foeImg').classList.remove('in-ball'); $('foeImg').classList.add('released'); Snd.sfx('ballEscape'); }
+      if (e.fx === 'caught') Snd.sfx('ballCatch');
+      if (FAINT_RE.test(e.msg)) Snd.sfx('faint');
+      if (LEVEL_RE.test(e.msg)) Snd.sfx('levelUp');
       await sleep(e.fx === 'caught' || e.fx === 'evolve' || e.fx === 'exhaust' ? 1500 : e.atk ? 650 : 1050);
       $('myImg').classList.remove('evolved');
     }
@@ -216,6 +231,7 @@ const Battle = (() => {
     team = d.team || team;
     showPicker(false);
     if (d.result) {
+      Snd.sfx(d.result === 'win' || d.result === 'caught' ? 'win' : d.result === 'lose' ? 'defeat' : 'click');
       $('bActions').hidden = true;
       $('bContinue').hidden = false;
       $('bContinue').focus();
@@ -246,6 +262,8 @@ const Battle = (() => {
     setMine(s.you.mine);
     renderRaidBar(s);
     lock(true);
+    Snd.music('boss');
+    setTimeout(() => Snd.cry(s.boss.species_id), 300);
     msg(`${SPECIES[s.boss.species_id].name} lendário bloqueia o caminho!`);
     queue = Promise.resolve();
     clearInterval(turnTimer);
@@ -294,6 +312,7 @@ const Battle = (() => {
     $('turnInfo').hidden = true;
     raid = null;
     setBalls(d.balls);
+    Snd.sfx(d.result === 'caught' ? 'win' : d.result === 'fled' ? 'click' : d.result === 'left' ? 'click' : 'defeat');
     if (d.result === 'left') { closeOverlay(); return; }
     const name = speciesName(st.foeSp).replace(/^./, (c) => c.toUpperCase());
     let text = d.result === 'caught' ? (d.you ? `🎉 Você capturou ${name}!` : `${d.winner} capturou ${name}!`)
@@ -313,6 +332,7 @@ const Battle = (() => {
     inBattle = false;
     chatBattle(false);
     mode = 'wild';
+    Snd.music(window.worldMusic());
   }
 
   function close() {

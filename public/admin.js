@@ -101,12 +101,14 @@ const Admin = (() => {
   function eventsHtml() {
     if (!evs) return '<p class="empty">Carregando…</p>';
     const cur = evs.current;
-    const now = cur ? '<div class="ev-now"><b>' + esc(cur.icon + ' ' + cur.name) + '</b><span>' + (cur.phase === 'lobby' ? 'Inscrições abertas · abre em ' + Math.max(0, Math.round((cur.startsIn - (Date.now() - evsAt)) / 1000)) + ' s' : cur.phase === 'running' ? 'Em andamento ' + cur.n + '/' + cur.total : 'Encerrando') + ' · ' + cur.players + ' no salão</span><button class="ab danger" data-a="evCancel">⏹ Cancelar evento</button></div>' : '<p class="hintline">Nenhum evento em andamento.</p>';
+    const wbs = evs.worldboss;
+    const wbNow = wbs ? '<div class="ev-now"><b>🐉 ' + esc(wbs.name) + '</b><span>Em andamento · vida ' + wbs.hpPct + '% · ' + wbs.players + ' lutando · ' + Math.max(0, Math.round(wbs.left / 60000)) + ' min restantes</span><button class="ab danger" data-a="evCancel" data-t="worldboss">⏹ Cancelar Chefe de Mundo</button></div>' : '';
+    const now = wbNow + (cur ? '<div class="ev-now"><b>' + esc(cur.icon + ' ' + cur.name) + '</b><span>' + (cur.phase === 'lobby' ? 'Inscrições abertas · abre em ' + Math.max(0, Math.round((cur.startsIn - (Date.now() - evsAt)) / 1000)) + ' s' : cur.phase === 'running' ? 'Em andamento ' + cur.n + '/' + cur.total : 'Encerrando') + ' · ' + cur.players + ' no salão</span><button class="ab danger" data-a="evCancel" data-t="quiz">⏹ Cancelar evento</button></div>' : (wbs ? '' : '<p class="hintline">Nenhum evento em andamento.</p>'));
     const auto = evs.auto;
-    const types = evs.types.map((t) => '<div class="ev-type"><div><b>' + esc(t.icon + ' ' + t.name) + '</b><small>' + esc(t.desc) + '</small></div><button class="ab" data-a="evStart" data-t="' + esc(t.id) + '"' + (cur ? ' disabled' : '') + '>▶ Iniciar agora</button></div>').join('');
+    const types = evs.types.map((t) => '<div class="ev-type"><div><b>' + esc(t.icon + ' ' + t.name) + '</b><small>' + esc(t.desc) + '</small></div><button class="ab" data-a="evStart" data-t="' + esc(t.id) + '"' + ((t.id === 'worldboss' ? wbs : cur) ? ' disabled' : '') + '>▶ Iniciar agora</button></div>').join('');
     const recent = evs.recent.map((r) => '<div class="alog"><span>' + fmtDate(r.at) + '</span> <b>' + esc(r.type) + '</b> · ' + r.players + ' jogador(es) · 🏆 ' + esc(r.winner || '—') + '</div>').join('');
     return '<div class="section-title">Agora</div>' + now +
-      '<div class="section-title">Agendamento automático</div><p class="hintline">O quiz roda sozinho de ' + auto.everyMin + ' em ' + auto.everyMin + ' minutos.' + (auto.enabled && auto.nextAt ? ' Próximo: ' + fmtDate(auto.nextAt) + '.' : '') + '</p><button class="ab ' + (auto.enabled ? 'danger' : 'ok') + '" data-a="evAuto">' + (auto.enabled ? '⏸ Desligar automático' : '▶ Ligar automático') + '</button>' +
+      '<div class="section-title">Agendamento automático</div><p class="hintline">O quiz roda sozinho de ' + auto.everyMin + ' em ' + auto.everyMin + ' minutos' + (auto.enabled && auto.nextAt ? ' (próximo: ' + fmtDate(auto.nextAt) + ')' : '') + ' e o Chefe de Mundo de ' + (auto.wbEveryMin / 60) + ' em ' + (auto.wbEveryMin / 60) + ' horas' + (auto.enabled && auto.wbNextAt ? ' (próximo: ' + fmtDate(auto.wbNextAt) + ')' : '') + '.</p><button class="ab ' + (auto.enabled ? 'danger' : 'ok') + '" data-a="evAuto">' + (auto.enabled ? '⏸ Desligar automático' : '▶ Ligar automático') + '</button>' +
       '<div class="section-title">Iniciar evento</div><label class="al">Abertura do salão (segundos)<input id="evLobby" class="af" type="number" inputmode="numeric" min="10" max="900" value="' + (evLobbyVal || 60) + '" /></label>' + types +
       '<p class="hintline">Todos recebem o aviso; quem estiver no Salão de Eventos (Cidade, casa da direita) participa.</p>' +
       '<div class="section-title">Últimos eventos</div>' + (recent || '<p class="empty">Nenhum evento ainda.</p>');
@@ -173,7 +175,7 @@ const Admin = (() => {
       case 'healGv': return act('/heal', { username: $('gvU').value.trim() }, 'Equipe curada');
       case 'announce': return act('/announce', { text: $('anTxt').value }, 'Aviso enviado').then(() => ($('anTxt') && ($('anTxt').value = '')));
       case 'evStart': evLobbyVal = num('evLobby', 60); return act('/events/start', { type: b.dataset.t, lobbySec: evLobbyVal }, 'Evento iniciado');
-      case 'evCancel': return act('/events/cancel', {}, 'Evento cancelado');
+      case 'evCancel': return act('/events/cancel', { type: b.dataset.t }, 'Evento cancelado');
       case 'evAuto': return act('/events/auto', { enabled: !evs?.auto.enabled }, 'Agendamento atualizado');
       case 'tpxy': return act('/teleport', { mode: 'xy', x: num('tpX', 50), y: num('tpY', 50) }, 'Teletransportado');
     }

@@ -166,7 +166,7 @@ module.exports = function registerAdmin(ctx) {
     res.json({ ok: true });
   });
   route('post', '/events/cancel', async (req, res) => {
-    const r = ctx.events.cancel();
+    const r = ctx.events.cancel(str(req.body.type, 20));
     if (r.error) return res.status(409).json({ error: r.error });
     await audit(req.admin, 'evento-cancelar', '');
     res.json({ ok: true });

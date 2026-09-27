@@ -118,6 +118,14 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 - **Painel de administração → aba Eventos**: iniciar **qualquer evento** na hora (com tempo de abertura), cancelar o que está rodando, ligar/desligar o agendamento automático e ver os últimos eventos (tabela `EventLog`). Rotas: `GET /api/admin/events`, `POST /api/admin/events/start | cancel | auto`.
 - **Novo evento = uma entrada em `types`** de `server/events.js` (`{ name, icon, desc, run(ev) }`); ele já aparece no painel admin e no agendamento.
 
+## Chefe de Mundo (evento cooperativo)
+
+- Um **chefe gigante** (Snorlax Gigante, Mewtwo Sombra, Rayquaza Ancestral ou Lugia Abissal, Lv.100) aparece na **Praça da Cidade**, com aviso para todos, chip vermelho "🐉 …" no HUD e ponto vermelho no minimapa. Fica 15 min; se ninguém o derrotar a tempo, ele foge.
+- **Todos os jogadores da Cidade lutam ao mesmo tempo, em tempo real, contra a MESMA vida** (guardada no servidor). Para entrar é só **encostar nele** (ou tocar no chip). Abre uma tela de combate com a barra de vida global, os maiores danos, seu Pokémon e os golpes: **Investida** (1,2 s de recarga), **Golpe Forte** (3 s) e **Poder Lendário** (8 s, só lendários), além de **Trocar** e **Sair da luta**.
+- A vida do boss **cresce a cada jogador que entra** (a luta escala com a multidão). O boss revida a cada 2,5 s em jogadores aleatórios (nenhum golpe tira mais que 40% da vida do seu Pokémon) e a cada 4 ações usa o Poder Lendário em **todos**. Quando um Pokémon cai entra o próximo; sem Pokémon você fica fora, mas continua na luta.
+- **Prêmios ao derrotá-lo** (só para quem estava **em combate** e causou dano; quem saiu da luta ou nunca atacou não recebe): **até 5 Master Balls por rodada, 1 para cada um dos 5 que mais causaram dano**, mais Ultra Balls, Bolotas, Fragmentos e EXP proporcionais à contribuição (dano).
+- Painel admin → aba **Eventos**: iniciar/cancelar o Chefe de Mundo (o mesmo botão do Quiz). Automático de **2 em 2 horas** (junto do agendamento do quiz, com o mesmo liga/desliga). O histórico vai para `EventLog`. Código: `server/worldboss.js` (servidor autoritativo) e `public/wboss.js` (tela de combate).
+
 ## Ginásio e mundos extras
 - **Ginásio** (Rota, 20 tiles a leste do Centro Pokémon, por uma estrada livre de grama alta): pisar na porta leva ao **salão do ginásio** (`GymScene`, `public/gym.js`), com três **portais**: **Cidade**, **Bioma de Gelo** e **Vulcão**. Caminhe até um portal para viajar; a porta verde de baixo volta à Rota.
 - **Mundos** (cada um com 100x100 tiles, gerados por `generateMap(mundo)` em `public/map.js`, iguais no servidor e no cliente):

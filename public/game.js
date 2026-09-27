@@ -10,6 +10,7 @@ let IS_ADMIN = false; // vem do servidor no login; o servidor confere de novo a 
 let MY_CLAN = null; // { id, tag, name, role }
 let GROUP = null; // { id, leader, members:[{id, username}] }
 let BOSS = null; // boss do mundo atual: { species_id, level, x, y, until }
+let WBOSS = null; // Chefe de Mundo na Praça da Cidade: { species_id, title, level, x, y, hp, maxHp, players, until }
 const BOSS_ALL = {}; // world -> { species_id, level, until } de cada mundo (o chip avisa de lendários em outros mundos)
 let BOSS_NEXT = null; // timestamp local do próximo boss
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -257,6 +258,12 @@ setInterval(() => {
     : other ? '⚔ Lendário: ' + SPECIES[other[1].species_id].name + ' Lv.' + other[1].level + ' · ' + WORLDS[other[0]].icon + ' ' + WORLDS[other[0]].name
     : '⏳ Próximo lendário: ' + fmtTime(BOSS_NEXT - Date.now());
 }, 500);
+setInterval(() => {
+  const c = $('wbChip');
+  c.hidden = !WBOSS;
+  if (WBOSS) c.textContent = '🐉 ' + WBOSS.title + ' · ' + Math.round((WBOSS.hp / WBOSS.maxHp) * 100) + '% · ' + fmtTime(WBOSS.until - Date.now());
+}, 500);
+$('wbChip').addEventListener('click', () => { if (!WBOSS) return; if (WORLD_ID === 'town') window.worldScene?.walkToWorld(WBOSS.x, WBOSS.y + 90); else toast('🐉 Vá à Cidade (portal do Ginásio) para enfrentar ' + WBOSS.title + '!'); });
 $('bossChip').addEventListener('click', () => { if (BOSS) window.worldScene?.walkToWorld(BOSS.x, BOSS.y); });
 $('closeBag').addEventListener('click', () => openBag(false));
 $('closeParty').addEventListener('click', () => openParty(false));
@@ -430,7 +437,7 @@ class WorldScene extends Phaser.Scene {
     this.socket.on('online', (n) => { $('online').textContent = n; });
     this.socket.on('players:init', ({ self, others, balls }) => {
       MY_ID = self.id;
-      if (self.world && self.world !== this.worldId) { this.loadWorld(self.world); this.setBoss(this.bossRaw?.[self.world] || null); }
+      if (self.world && self.world !== this.worldId) { this.loadWorld(self.world); this.setBoss(this.bossRaw?.[self.world] || null); this.setWBoss(this.wbRaw || null); }
       MY_CLAN = self.clan || null;
       setClanLabel();
       setBalls(balls);
@@ -515,6 +522,7 @@ class WorldScene extends Phaser.Scene {
       others.forEach((p) => this.addOther(p));
       wilds.forEach((w) => this.addWild(w));
       this.setBoss(this.bossRaw?.[world] || null);
+      this.setWBoss(this.wbRaw || null);
       this.cameras.main.resetFX();
       this.cameras.main.fadeIn(500, 255, 255, 255);
       const d = WORLDS[world];
@@ -533,6 +541,10 @@ class WorldScene extends Phaser.Scene {
     Story.init(this.socket);
     Dex.init(this.socket);
     this.socket.on('notice', ({ msg, big }) => toast(msg, big));
+    this.socket.on('wboss:map', (b) => {
+      this.wbRaw = b;
+      if (b && this.wbObj && WBOSS && WBOSS.species_id === b.species_id) { WBOSS = { ...b, until: Date.now() + b.left }; this.updateWBLabel(); } else this.setWBoss(b);
+    });
     this.socket.on('boss:state', ({ world, boss, nextIn }) => {
       BOSS_NEXT = nextIn != null ? Date.now() + nextIn : null;
       (this.bossRaw ||= {})[world] = boss;
@@ -1091,6 +1103,23 @@ class WorldScene extends Phaser.Scene {
     this.bossObj = { aura, shadow, img, label };
   }
 
+  // Chefe de Mundo: sprite gigante na praça da Cidade (só aparece na Cidade)
+  setWBoss(b) {
+    if (this.wbObj) { const o = this.wbObj; this.tweens.killTweensOf(o.aura); this.tweens.killTweensOf(o.img); Object.values(o).forEach((x) => x.destroy()); this.wbObj = null; }
+    WBOSS = b ? { ...b, until: Date.now() + b.left } : null;
+    if (!b || WORLD_ID !== 'town') return;
+    const aura = this.add.circle(b.x, b.y + 10, 120, 0xff3b3b, 0.22).setDepth(6);
+    this.tweens.add({ targets: aura, scale: 1.35, alpha: 0.05, yoyo: true, repeat: -1, duration: 800 });
+    const shadow = this.add.image(b.x, b.y + 84, 'shadow').setDepth(6).setScale(5);
+    const img = this.add.image(b.x, b.y, 'wilddot').setDepth(8);
+    const label = this.add.text(b.x, b.y - 130, '', { fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: '14px', fontStyle: 'bold', color: '#fff', backgroundColor: '#c41e3aee', padding: { x: 9, y: 4 } }).setOrigin(0.5).setDepth(20);
+    this.ensureMon(b.species_id, (key) => { if (img.active) img.setTexture(key).setDisplaySize(190, 190); });
+    this.tweens.add({ targets: img, y: b.y - 10, yoyo: true, repeat: -1, duration: 1000, ease: 'Sine.easeInOut' });
+    this.wbObj = { aura, shadow, img, label };
+    this.updateWBLabel();
+  }
+  updateWBLabel() { const o = this.wbObj; if (o && WBOSS) o.label.setText('🐉 ' + WBOSS.title + ' Lv.' + WBOSS.level + ' · ' + Math.round((WBOSS.hp / WBOSS.maxHp) * 100) + '% (' + WBOSS.players + ' lutando)'); }
+
   walkToWorld(x, y) { this.setTarget({ worldX: x, worldY: y }, false); }
 
   destroyWild(w) { this.tweens.killTweensOf(w.img); w.img.destroy(); w.shadow.destroy(); w.label.destroy(); }
@@ -1124,6 +1153,7 @@ class WorldScene extends Phaser.Scene {
     const S = 150, k = S / MAP_W, c = this.miniCtx;
     c.drawImage(this.mini, 0, 0, S, S);
     const dot = (px, py, col, r) => { c.fillStyle = col; c.beginPath(); c.arc((px / TILE) * k, (py / TILE) * k, r, 0, Math.PI * 2); c.fill(); };
+    if (WBOSS && WORLD_ID === 'town') { c.lineWidth = 1.5; c.strokeStyle = '#fff'; dot(WBOSS.x, WBOSS.y, '#ff3b3b', 5); c.stroke(); }
     if (BOSS) { c.lineWidth = 1.5; c.strokeStyle = '#fff'; dot(BOSS.x, BOSS.y, '#f0b400', 4.2); c.stroke(); }
     this.wilds.forEach((w) => dot(w.img.x, w.img.y, w.water ? '#5ec8ff' : '#ffb02e', 1.8));
     const mates = new Set((GROUP?.members || []).map((m) => m.id));

@@ -11,6 +11,8 @@ const REVEAL_MS = FAST ? 700 : 4500;
 const END_MS = FAST ? 1500 : 10000;
 const QUIZ_N = 10;
 const EVERY_MS = 20 * 60000; // automático: de 20 em 20 minutos
+const WB_EVERY_MS = 120 * 60000; // Chefe de Mundo automático: de 2 em 2 horas
+const WB_TYPE = { id: 'worldboss', name: 'Chefe de Mundo', icon: '🐉', desc: 'Um chefe gigante na Praça da Cidade: todos lutam juntos, em tempo real, contra a mesma vida. Até 5 Master Balls para quem mais causar dano!' };
 
 // Prêmios (Ultra Ball e Master Ball só saem em eventos)
 const PRIZES = {
@@ -22,10 +24,11 @@ const PRIZES = {
 };
 const ITEM_NAMES = { pokeballs: 'Pokébolas', greatballs: 'Great Balls', ultraballs: 'Ultra Balls', masterballs: 'Master Ball', apricorns: 'Bolotas', shards: 'Fragmentos' };
 
-module.exports = function createEvents({ io, prisma, socketByUser, meByUser, durable }) {
+module.exports = function createEvents({ io, prisma, socketByUser, meByUser, durable, worldBoss }) {
   let ev = null; // evento em andamento
   let autoOn = true;
   let nextAt = Date.now() + EVERY_MS;
+  let nextWbAt = Date.now() + WB_EVERY_MS;
   let statusTimer = 0;
 
   const types = {
@@ -172,6 +175,7 @@ module.exports = function createEvents({ io, prisma, socketByUser, meByUser, dur
 
   // ---------------------------------------------------------------- ciclo de vida
   function start(typeId, { by = 'auto', lobbyMs = LOBBY_MS } = {}) {
+    if (typeId === 'worldboss') return worldBoss.start({ by });
     const def = types[typeId];
     if (!def) return { error: 'Tipo de evento desconhecido' };
     if (ev) return { error: 'Já existe um evento em andamento' };
@@ -198,7 +202,8 @@ module.exports = function createEvents({ io, prisma, socketByUser, meByUser, dur
     return { ok: true };
   }
 
-  function cancel() {
+  function cancel(typeId) {
+    if (typeId === 'worldboss' || (!ev && worldBoss.status())) return worldBoss.cancel();
     if (!ev) return { error: 'Não há evento em andamento' };
     ev.cancelled = true;
     for (const uid of ev.parts.keys()) emit(uid, 'event:cancel', {});
@@ -213,12 +218,18 @@ module.exports = function createEvents({ io, prisma, socketByUser, meByUser, dur
       if (a) autoOn = a.value === '1';
       const saved = Number(n?.value);
       nextAt = Number.isFinite(saved) && saved > Date.now() ? saved : Date.now() + EVERY_MS;
+      const wbSaved = Number((await prisma.meta.findUnique({ where: { key: 'events.wb.next' } }))?.value);
+      nextWbAt = Number.isFinite(wbSaved) && wbSaved > Date.now() ? wbSaved : Date.now() + WB_EVERY_MS;
     } catch (e) { console.error('[eventos] config', e.message); }
   }
   const saveSetting = (key, value) => durable('evento-config', () => prisma.meta.upsert({ where: { key }, create: { key, value: String(value) }, update: { value: String(value) } }));
   async function setAuto(on) { autoOn = !!on; await saveSetting('events.auto', autoOn ? '1' : '0'); if (autoOn && nextAt < Date.now()) { nextAt = Date.now() + EVERY_MS; await saveSetting('events.next', nextAt); } }
 
   const timer = setInterval(() => {
+    if (autoOn && Date.now() >= nextWbAt) { // Chefe de Mundo: de 2 em 2 h
+      if (worldBoss.status()) nextWbAt = Date.now() + 60000;
+      else if (worldBoss.start({ by: 'auto' }).ok) { nextWbAt = Date.now() + WB_EVERY_MS; saveSetting('events.wb.next', nextWbAt); }
+    }
     if (!autoOn || Date.now() < nextAt) return;
     if (ev) { nextAt = Date.now() + 60000; return; } // ocupado: tenta de novo em 1 min
     if (start('quiz', { by: 'auto' }).ok) { nextAt = Date.now() + EVERY_MS; saveSetting('events.next', nextAt); }
@@ -228,9 +239,10 @@ module.exports = function createEvents({ io, prisma, socketByUser, meByUser, dur
   async function summary() {
     const recent = await prisma.eventLog.findMany({ orderBy: { id: 'desc' }, take: 8 });
     return {
-      types: Object.values(types).map((t) => ({ id: t.id, name: t.name, icon: t.icon, desc: t.desc })),
+      types: [...Object.values(types), WB_TYPE].map((t) => ({ id: t.id, name: t.name, icon: t.icon, desc: t.desc })),
+      worldboss: worldBoss.status(),
       current: status(),
-      auto: { enabled: autoOn, nextAt: autoOn ? nextAt : null, everyMin: EVERY_MS / 60000 },
+      auto: { enabled: autoOn, nextAt: autoOn ? nextAt : null, everyMin: EVERY_MS / 60000, wbNextAt: autoOn ? nextWbAt : null, wbEveryMin: WB_EVERY_MS / 60000 },
       recent: recent.map((r) => ({ type: r.type, at: r.started_at, players: r.players, winner: r.winner })),
     };
   }

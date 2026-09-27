@@ -8,6 +8,7 @@ const { Server } = require('socket.io');
 const { PrismaClient } = require('@prisma/client');
 const { MAP_W, TILE, PLAYER_SPEED, CLEAR_MIN, CLEAR_MAX, GYM, LABS, PROF_HOUSE, EVENT_HOUSE, PORTAL, ARRIVE, GYM_EXIT, WORLDS, WORLD_IDS, generateMap } = require('../public/map.js');
 const createWorld = require('./world.js');
+const createWorldBoss = require('./worldboss.js');
 const { SPECIES, WILD_TABLE, WATER_TABLE, calcStats, minLevel } = require('../public/species.js');
 const { BALLS, RECIPES } = require('../public/items.js');
 const { pickSpecies, makeWild, resolveTurn, mineView, wildView, teamView } = require('./battle.js');
@@ -269,7 +270,7 @@ const raidSys = createRaidSystem({
 });
 
 registerAdmin({
-  events: { start: (...a) => events.start(...a), cancel: () => events.cancel(), setAuto: (v) => events.setAuto(v), summary: () => events.summary() },
+  events: { start: (...a) => events.start(...a), cancel: (...a) => events.cancel(...a), setAuto: (v) => events.setAuto(v), summary: () => events.summary() },
   afterGive: (uid) => refreshBuddy(uid),
   app, prisma, auth, moderation, io, socketByUser, meByUser, raidSys, teleportTo, nextFreeSlot, invOf, TILE,
   isBusy: (uid) => battlingUsers.has(uid),
@@ -293,7 +294,13 @@ const pvp = createPvp({
 const voip = createVoip({ socketByUser, groupInfo: raidSys.groupInfo });
 const pokedex = createPokedex({ app, prisma, auth, socketByUser, durable });
 const story = createStory({ prisma, socketByUser, meByUser, durable, nextFreeSlot, dexMark: (uid, sp, k) => pokedex.mark(uid, sp, k), onTeamChanged: (uid) => refreshBuddy(uid) });
-const events = createEvents({ io, prisma, socketByUser, meByUser, durable });
+const worldBoss = createWorldBoss({
+  io, prisma, socketByUser, meByUser, durable,
+  isBusy: (uid) => battlingUsers.has(uid) || raidSys.inRaid(uid) || pvp.inMatch(uid) || !!meByUser.get(uid)?.hidden,
+  setBusy: (uid, v) => { v ? battlingUsers.add(uid) : battlingUsers.delete(uid); markCombat(uid, v ? 'raid' : null); },
+  buddyRefresh: (uid) => refreshBuddy(uid),
+});
+const events = createEvents({ io, prisma, socketByUser, meByUser, durable, worldBoss });
 const chat = createChat({ io, socketByUser, meByUser, groupMembers: raidSys.groupMembers, clanMembers: clans.clanMembersOnline, moderation });
 
 io.use(async (socket, next) => {
@@ -331,6 +338,7 @@ io.on('connection', (socket) => {
   pokedex.load(u.id);
   story.load(u.id);
   events.bind(socket, u.id);
+  worldBoss.bind(socket, u.id);
 
   socket.emit('players:init', {
     self: me,
@@ -417,7 +425,7 @@ io.on('connection', (socket) => {
   }
 
   function enterInterior(kind, b) {
-    if (me.hidden || battle || starting || raidSys.inRaid(u.id) || pvp.inMatch(u.id)) return false;
+    if (me.hidden || battle || starting || raidSys.inRaid(u.id) || pvp.inMatch(u.id) || worldBoss.inFight(u.id)) return false;
     const d = doorOf(b);
     if (Math.hypot(me.x - d.x, me.y - d.y) > TILE * 1.3) return false; // precisa estar na porta
     const ex = exitOf(b);
@@ -455,7 +463,7 @@ io.on('connection', (socket) => {
   socket.on('story:tips', (mode) => { if (['done', 'skip', 'reset'].includes(mode)) story.setTips(u.id, mode); });
   let chiefLock = 0;
   socket.on('story:challenge', (cid) => { // tocar no chefe do cenário: luta especial (não dá para capturar)
-    if (battle || starting || acting || me.hidden || raidSys.inRaid(u.id) || pvp.inMatch(u.id) || Date.now() < chiefLock) return;
+    if (battle || starting || acting || me.hidden || raidSys.inRaid(u.id) || pvp.inMatch(u.id) || worldBoss.inFight(u.id) || Date.now() < chiefLock) return;
     chiefLock = Date.now() + 2500;
     const r = story.challenge(u.id, String(cid));
     if (r.error) return socket.emit('notice', { msg: r.error });
@@ -545,7 +553,7 @@ io.on('connection', (socket) => {
     budget = Math.min(BUDGET_CAP, budget + ((now - last) / 1000) * MAX_SPEED);
     last = now;
     if (!Number.isFinite(x) || !Number.isFinite(y) || me.hidden) return;
-    if (battle || starting || raidSys.inRaid(u.id) || pvp.inMatch(u.id)) return socket.emit('player:correct', { x: me.x, y: me.y }); // parado em batalha
+    if (battle || starting || raidSys.inRaid(u.id) || pvp.inMatch(u.id) || worldBoss.inFight(u.id)) return socket.emit('player:correct', { x: me.x, y: me.y }); // parado em batalha
 
     const dist = Math.hypot(x - me.x, y - me.y);
     if (dist > budget || W[me.world].isBlocked(x, y)) {
@@ -569,8 +577,9 @@ io.on('connection', (socket) => {
       return;
     }
     raidSys.onMove(u.id);
+    worldBoss.onMove(u.id); // encostar no Chefe de Mundo entra na luta
     story.onMove(u.id, me); // Modo História: chegar a um ponto do mapa
-    if (now >= immuneUntil && !battle && !starting && !raidSys.inRaid(u.id)) {
+    if (now >= immuneUntil && !battle && !starting && !raidSys.inRaid(u.id) && !worldBoss.inFight(u.id)) {
       for (const w of W[me.world].wilds.values()) {
         if (!w.busy && Math.hypot(me.x - w.x, me.y - w.y) < (w.water ? WATER_TOUCH : TOUCH_RADIUS)) { startBattle(w); return; }
       }
@@ -583,6 +592,7 @@ io.on('connection', (socket) => {
     pokedex.drop(u.id);
     voip.onDisconnect(u.id); // antes do grupo desfazer, para avisar os pares
     raidSys.onDisconnect(u.id);
+    worldBoss.onDisconnect(u.id);
     pvp.onDisconnect(u.id);
     if (battle) releaseWild(battle.world);
     if (socketByUser.get(u.id) === socket) { socketByUser.delete(u.id); meByUser.delete(u.id); }

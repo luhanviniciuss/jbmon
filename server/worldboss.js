@@ -8,8 +8,9 @@ const { loadTeam } = require('./team.js');
 
 const FAST = process.env.EVENT_FAST === '1'; // só para testes automáticos
 const LIFE_MS = FAST ? 120000 : 15 * 60000; // tempo para derrotá-lo antes que ele fuja
-const LEVEL = 100;
-const HP_PER_PLAYER = 8; // cada jogador que entra soma 8x a vida base do boss (a luta escala com a multidão)
+const LEVEL = 1000; // o nível máximo do jogo: um desafio para os mais fortes
+const HP_PER_PLAYER = 4; // cada jogador que entra soma 4x a vida base do boss (a luta escala com a multidão)
+const DEF_CAP = 400; // defesa limitada: com defesa de nível 1000 quase ninguém conseguiria machucá-lo
 const START_PLAYERS = 3; // vida inicial equivale a esta quantidade de jogadores
 const TICK_MS = 500;
 const BOSS_HIT_MS = 2500; // o boss ataca a cada 2,5 s
@@ -221,6 +222,7 @@ module.exports = function createWorldBoss({ io, prisma, socketByUser, meByUser, 
     if (wb) return { error: 'Já existe um Chefe de Mundo em andamento' };
     const def = BOSSES.find((b) => b.id === species) || BOSSES[rand(0, BOSSES.length - 1)];
     const stats = calcStats(def.id, LEVEL);
+    stats.defense = Math.min(stats.defense, DEF_CAP);
     const e = { id: Date.now(), by, species_id: def.id, title: def.title, level: LEVEL, stats, maxHp: stats.hp * HP_PER_PLAYER * START_PLAYERS, hp: 0, expiresAt: Date.now() + LIFE_MS, parts: new Map(), log: [], turns: 0, done: false };
     e.hp = e.maxHp;
     wb = e;

@@ -46,6 +46,7 @@
 
     <!-- Botões de ação: colunas flutuantes no polegar (celular) / barra no topo (desktop) -->
     <div class="hud-actions">
+      <button class="fab glass" id="dailyBtn" aria-label="Login diário"><span class="ic">🎁</span><span class="lbl">Diário</span><i class="badge dot" id="dailyBadge" hidden></i></button>
       <button class="fab glass" id="partyBtn" aria-label="Abrir equipe"><span class="ic"><span class="ball sm"></span></span><span class="lbl">Party</span><kbd>P</kbd></button>
       <button class="fab glass" id="bagBtn" aria-label="Abrir bolsa"><span class="ic">🎒</span><span class="lbl">Bolsa</span><kbd>B</kbd></button>
       <button class="fab glass" id="groupBtn" aria-label="Abrir grupo"><span class="ic">👥</span><span class="lbl">Grupo</span><kbd>G</kbd></button>
@@ -65,6 +66,12 @@
   <aside id="drawer" class="drawer glass" aria-hidden="true">
     <header><h2>Sua Party</h2><button class="close" id="closeParty" aria-label="Fechar">✕</button></header>
     <div id="partyList" class="list"></div>
+  </aside>
+
+  <!-- Login diário -->
+  <aside id="daily" class="drawer glass" aria-hidden="true">
+    <header><h2>🎁 Login Diário</h2><button class="close" id="closeDaily" aria-label="Fechar">✕</button></header>
+    <div id="dailyBody" class="list"></div>
   </aside>
 
   <!-- Bolsa / Craft -->
@@ -284,6 +291,7 @@
   <script src="/dex.js"></script>
   <script src="/story.js"></script>
   <script src="/events.js"></script>
+  <script src="/daily.js"></script>
   <script src="/wboss.js"></script>
   <script src="/settings.js"></script>
   <script src="/admin.js"></script>

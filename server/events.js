@@ -7,6 +7,7 @@
 const { makeQuiz } = require('./quiz-bank.js');
 const { SPECIES } = require('../public/species.js');
 const { rand, pickSpecies } = require('./battle.js');
+const { isXmasActive } = require('./season.js');
 
 const LOBBY_MS = 120000; // inscrições abertas
 const FAST = process.env.EVENT_FAST === '1'; // só para testes automáticos: tempos curtos
@@ -21,6 +22,8 @@ const WB_TYPE = { id: 'worldboss', name: 'Chefe de Mundo', icon: '🐉', desc: '
 
 const TREASURE_N = 16, TREASURE_MS = FAST ? 20000 : 300000; // 5 min
 const TREASURE_TIERS = [[{ val: 1, icon: '🥉' }, 10], [{ val: 3, icon: '🥈' }, 5], [{ val: 8, icon: '🥇' }, 1.4]];
+const GIFT_N = 18, GIFT_MS = FAST ? 20000 : 300000; // 5 min — evento sazonal de Natal
+const GIFT_TIERS = [[{ val: 2, icon: '🎁' }, 10], [{ val: 5, icon: '🎀' }, 5], [{ val: 12, icon: '⭐' }, 1.4]];
 const BALLRAIN_MS = FAST ? 20000 : 600000; // 10 min
 const BALLRAIN_WAVE_MS = FAST ? 2500 : 15000;
 const BALLRAIN_PER_WAVE = 5;
@@ -68,6 +71,7 @@ module.exports = function createEvents({ io, prisma, socketByUser, meByUser, dur
     luck: { id: 'luck', name: 'Hora da Sorte', icon: '🍀', desc: 'Por 15 minutos, toda captura ou vitória em qualquer lugar do jogo rende Bolotas e Fragmentos extras pra todo mundo — sem precisar se inscrever!', run: runLuck, competitive: false },
     wheel: { id: 'wheel', name: 'Roleta Dourada', icon: '🎡', desc: 'Quem estiver no Salão de Eventos ganha um giro grátis na roleta, com prêmios de Pokébolas especiais. Sem perguntas, sem corrida — só sorte!', run: runWheel, competitive: false, where: 'Salão de Eventos' },
     duel: { id: 'duel', name: 'Duelo Relâmpago', icon: '⚔️', desc: 'Um torneio-sorteio eliminatório entre quem está no salão: cada rodada decide por sorte quem avança, até sobrar um campeão.', run: runDuel, where: 'Salão de Eventos' },
+    xmas: { id: 'xmas', name: 'Caça aos Presentes de Natal', icon: '🎄', desc: `${GIFT_N} presentes espalhados pela Praça da Cidade por 5 minutos. Ache-os andando por cima; os com laço e estrela valem mais! Sazonal: só roda sozinho na época de Natal (1/dez a 6/jan), mas um admin pode iniciar fora dela.`, run: runXmas, where: 'Praça da Cidade', seasonal: true },
   };
 
   const sleepUntil = (e, ms) => new Promise((resolve) => {
@@ -130,12 +134,12 @@ module.exports = function createEvents({ io, prisma, socketByUser, meByUser, dur
   // ---------------------------------------------------------------- eventos "de mundo": andar até o item/bandeira
   function onMove(uid, me) {
     if (!ev || ev.phase !== 'running' || me.world !== 'town' || !ev.parts.has(uid)) return;
-    if (ev.type === 'treasure' || ev.type === 'ballrain') {
+    if (ev.type === 'treasure' || ev.type === 'ballrain' || ev.type === 'xmas') {
       for (const [id, pk] of ev.pickups) {
         if (Math.hypot(me.x - pk.x, me.y - pk.y) > PICKUP_R) continue;
         ev.pickups.delete(id);
         const p = ev.parts.get(uid);
-        if (ev.type === 'treasure') { p.score += pk.tier.val; emit(uid, 'event:pickup', { icon: pk.tier.icon, val: pk.tier.val }); }
+        if (ev.type === 'treasure' || ev.type === 'xmas') { p.score += pk.tier.val; emit(uid, 'event:pickup', { icon: pk.tier.icon, val: pk.tier.val }); }
         else { p.score += pk.amount; durable('evento-bolas', () => prisma.user.update({ where: { id: uid }, data: { pokeballs: { increment: pk.amount } } })).then((u) => u && emit(uid, 'inventory', { poke: u.pokeballs, great: u.greatballs, ultra: u.ultraballs, master: u.masterballs })); emit(uid, 'event:pickup', { icon: '🎾', val: pk.amount }); }
         pushStatus(false);
         break;
@@ -364,6 +368,24 @@ module.exports = function createEvents({ io, prisma, socketByUser, meByUser, dur
     return !e.cancelled;
   }
 
+  // ---------------------------------------------------------------- tipo: CAÇA AOS PRESENTES DE NATAL (sazonal)
+  function spawnGifts(e) {
+    let id = 0;
+    for (let tries = 0; tries < 4000 && e.pickups.size < GIFT_N; tries++) {
+      const tx = rand(30, 70), ty = rand(30, 70);
+      if (!world.isWalkable(tx, ty, 'town')) continue;
+      e.pickups.set(id++, { x: (tx + 0.5) * 32, y: (ty + 0.5) * 32, tier: wpick(GIFT_TIERS) });
+    }
+  }
+  async function runXmas(e) {
+    e.phase = 'running'; e.total = 0; e.pickups = new Map();
+    spawnGifts(e);
+    pushStatus();
+    await sleepUntil(e, GIFT_MS);
+    e.pickups.clear();
+    return !e.cancelled;
+  }
+
   // ---------------------------------------------------------------- tipo: CHUVA DE POKÉBOLAS
   async function runBallRain(e) {
     e.phase = 'running'; e.total = 0; e.pickups = new Map(); e.nextPid = 0;
@@ -486,7 +508,8 @@ module.exports = function createEvents({ io, prisma, socketByUser, meByUser, dur
   }
 
   // ---------------------------------------------------------------- agendamento automático (persistido em Meta)
-  const AUTO_TYPES = Object.keys(types); // o automático sorteia entre todos os tipos "de salão" cadastrados
+  // O automático sorteia entre todos os tipos "de salão" cadastrados; os sazonais (Natal) só entram na época deles.
+  const autoTypes = () => Object.keys(types).filter((t) => !types[t].seasonal || isXmasActive());
   async function loadSettings() {
     try {
       const a = await prisma.meta.findUnique({ where: { key: 'events.auto' } });
@@ -508,7 +531,8 @@ module.exports = function createEvents({ io, prisma, socketByUser, meByUser, dur
     }
     if (!autoOn || Date.now() < nextAt) return;
     if (ev) { nextAt = Date.now() + 60000; return; } // ocupado: tenta de novo em 1 min
-    const pick = AUTO_TYPES[rand(0, AUTO_TYPES.length - 1)];
+    const pool = autoTypes();
+    const pick = pool[rand(0, pool.length - 1)];
     if (start(pick, { by: 'auto' }).ok) { nextAt = Date.now() + EVERY_MS; saveSetting('events.next', nextAt); }
   }, 5000);
   timer.unref();

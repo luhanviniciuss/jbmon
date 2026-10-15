@@ -31,6 +31,8 @@ model User {
   masterballs   Int       @default(0)
   apricorns     Int       @default(0)
   shards        Int       @default(0)
+  last_login    DateTime? // data do último resgate do login diário (sequência de 7 dias; zera se faltar um dia)
+  login_streak  Int       @default(0)
   created_at    DateTime  @default(now())
   pokemons      Pokemon[]
   pokedex       PokedexEntry[]

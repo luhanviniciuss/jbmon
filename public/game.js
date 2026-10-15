@@ -441,9 +441,12 @@ class WorldScene extends Phaser.Scene {
     });
     this.socket.on('connect', () => { $('offline').hidden = true; Snd.music(worldMusic()); });
     this.socket.on('online', (n) => { $('online').textContent = n; });
-    this.socket.on('players:init', ({ self, others, balls }) => {
+    this.socket.on('players:init', ({ self, others, balls, xmas }) => {
       MY_ID = self.id;
+      window.XMAS = !!xmas;
       if (self.world && self.world !== this.worldId) { this.loadWorld(self.world); this.setBoss(this.bossRaw?.[self.world] || null); this.setWBoss(this.wbRaw || null); }
+      else if (window.XMAS && !this._xmasApplied) this.loadWorld(this.worldId);
+      this._xmasApplied = true;
       MY_CLAN = self.clan || null;
       setClanLabel();
       setBalls(balls);
@@ -631,9 +634,10 @@ class WorldScene extends Phaser.Scene {
       this.reg(this.add.rectangle(CLEAR_MIN * TILE + cw / 2, CLEAR_MIN * TILE + cw / 2, cw, cw, 0xffffff, 0.14).setStrokeStyle(3, 0xffffff, 0.55).setDepth(1));
       this.drawCenter(LAB);
       this.drawGym();
+      if (window.XMAS) this.xmasSnow();
     } else {
       this.drawPortal();
-      if (def.id === 'town') this.drawTown();
+      if (def.id === 'town') { this.drawTown(); if (window.XMAS) this.xmasSnow(); }
       else { this.weather(def.id); this.drawChiefs(def.id); }
     }
     $('worldChip').title = def.wild ? `${def.name} · Lv. ${def.wild.min}–${def.wild.cap}` : def.name;
@@ -755,6 +759,14 @@ class WorldScene extends Phaser.Scene {
     spin.add(sg);
     this.tweens.add({ targets: spin, angle: 360, duration: 2600, repeat: -1 });
     this.txt(cx, cy - 40, 'Portal do Ginásio', '11px', '#fff', '#3b2a80cc');
+  }
+
+  // Neve leve de Natal (sazonal): Rota e Cidade só ganham neve na época de Natal, sem mudar o clima do Gelo.
+  xmasSnow() {
+    const w = 2600;
+    const em = this.add.particles(0, 0, 'flake', { x: { min: 0, max: w }, y: -12, lifespan: 7000, speedY: { min: 30, max: 70 }, speedX: { min: -20, max: 20 }, scale: { min: 0.4, max: 1.2 }, alpha: { min: 0.5, max: 0.95 }, frequency: 70, quantity: 1 });
+    em.setScrollFactor(0).setDepth(30);
+    this.reg(em);
   }
 
   // Clima: neve caindo no gelo; brasas subindo e calor pulsando no vulcão

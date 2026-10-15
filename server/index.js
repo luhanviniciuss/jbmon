@@ -23,6 +23,8 @@ const createVoip = require('./voip.js');
 const createPokedex = require('./pokedex.js');
 const createStory = require('./story.js');
 const createEvents = require('./events.js');
+const createDaily = require('./daily.js');
+const { isXmasActive } = require('./season.js');
 const registerAdmin = require('./admin.js');
 const { retry, durable, flushPending, pendingCount } = require('./durable.js');
 const { loadTeam, nextFreeSlot, partyOf } = require('./team.js');
@@ -304,6 +306,7 @@ const worldBoss = createWorldBoss({
   buddyRefresh: (uid) => refreshBuddy(uid),
 });
 const events = createEvents({ io, prisma, socketByUser, meByUser, durable, worldBoss, world: worldCtx });
+const daily = createDaily({ prisma, durable });
 const chat = createChat({ io, socketByUser, meByUser, groupMembers: raidSys.groupMembers, clanMembers: clans.clanMembersOnline, moderation });
 
 io.use(async (socket, next) => {
@@ -342,11 +345,13 @@ io.on('connection', (socket) => {
   story.load(u.id);
   events.bind(socket, u.id);
   worldBoss.bind(socket, u.id);
+  daily.bind(socket, u.id, u);
 
   socket.emit('players:init', {
     self: me,
     balls: invOf(u),
     mats: matsOf(u),
+    xmas: isXmasActive(),
     others: [...players.entries()].filter(([sid, p]) => sid !== socket.id && p.world === me.world).map(([, p]) => p),
   });
   socket.emit('wild:list', W[me.world].publicList());

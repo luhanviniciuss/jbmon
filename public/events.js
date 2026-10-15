@@ -5,7 +5,7 @@
 //   um painel pequeno e flutuante acompanha o placar sem travar o mapa.
 const Events = (() => {
   const OPT = ['A', 'B', 'C', 'D'];
-  const ROAM = { treasure: 1, race: 1, ballrain: 1, luck: 1 }; // tipos "de mundo": não travam a tela
+  const ROAM = { treasure: 1, race: 1, ballrain: 1, luck: 1, xmas: 1 }; // tipos "de mundo": não travam a tela
   let status = null; // { id, type, name, icon, phase, startsIn, n, total, players, where } + recebidoEm
   let inside = false;
   let joined = false; // já me inscrevi neste evento (recebi event:joined)?
@@ -51,7 +51,7 @@ const Events = (() => {
     else if (status.type === 'whosthat') html = drawWhosThat();
     else if (status.type === 'duel') html = drawDuel();
     else if (status.type === 'wheel') html = drawWheel();
-    else if (status.type === 'treasure' || status.type === 'ballrain') html = drawRoamScore(status.type === 'treasure' ? '💰' : '🌧️');
+    else if (status.type === 'treasure' || status.type === 'ballrain' || status.type === 'xmas') html = drawRoamScore(status.type === 'treasure' ? '💰' : status.type === 'xmas' ? '🎄' : '🌧️');
     else if (status.type === 'race') html = drawRace();
     else if (status.type === 'luck') html = drawLuck();
     else html = drawQuiz(); // quiz, lightning, golden: múltipla escolha padrão

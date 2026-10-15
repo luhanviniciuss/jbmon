@@ -108,7 +108,7 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 - **Dicas para quem chega**: na primeira vez, 11 cartões (movimento, batalhas, captura, equipe, cura, craft, mundos, lendários/grupos, arena/clãs, chat, Pokédex/missões) com **"Pular dicas"** a qualquer momento (fica salvo). Dá para **rever** no Diário, em ⚙ ou com o Professor.
 - A casa do Professor é um interior como o laboratório (`ProfScene`, `public/prof.js`): você anda dentro, toca no Professor ou na mesa dos iniciais e conversa.
 
-## Eventos (12 tipos, no Salão de Eventos)
+## Eventos (13 tipos, no Salão de Eventos)
 
 - Os eventos acontecem no **Salão de Eventos**: a casa da **direita** da **Cidade** (espelho da casa do Professor; o ginásio leva à Cidade). É um interior próprio (`HallScene`, `public/hall.js`) com palco, telão e poltronas. **Entrar no salão durante o lobby inscreve você**, não importa o tipo de evento.
 - Dois estilos: **de salão** (fica na telinha do evento: Quiz, Pergunta Relâmpago, Pergunta de Ouro, Quem é Esse Pokémon?, Roleta Dourada, Duelo Relâmpago) e **de mundo** (depois de se inscrever, saia e jogue na **Praça da Cidade** ou em qualquer lugar: Caça ao Tesouro, Corrida da Praça, Chuva de Pokébolas, Hora da Sorte — um painel pequeno e flutuante acompanha o placar sem travar o mapa).
@@ -120,7 +120,7 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 - **Painel de administração → aba Eventos**: iniciar **qualquer evento** na hora (com tempo de abertura), cancelar o que está rodando, ligar/desligar o agendamento automático e ver os últimos eventos (tabela `EventLog`). Rotas: `GET /api/admin/events`, `POST /api/admin/events/start | cancel | auto`.
 - **Novo evento = uma entrada em `types`** de `server/events.js` (`{ name, icon, desc, run(ev), competitive }`); ele já aparece no painel admin e no agendamento, que **sorteia entre todos os tipos cadastrados**.
 
-### Os outros 9 tipos
+### Os outros 10 tipos
 - **⚡ Pergunta Relâmpago**: a mesma engine do Quiz, só que **15 perguntas de 6 s** — puro reflexo.
 - **🌟 Pergunta de Ouro**: **uma pergunta só**, com prêmio grande; só quem acerta **primeiro** leva alguma coisa — os demais não ganham nada dessa vez.
 - **👤 Quem é Esse Pokémon?**: 8 silhuetas (sprite com `filter: brightness(0)` até a revelação); você **digita o nome** em vez de escolher entre 4 opções (compara ignorando acento/maiúsculas).
@@ -130,6 +130,7 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 - **🍀 Hora da Sorte**: por 15 min, **toda captura ou vitória em qualquer mundo** rende Bolotas e Fragmentos extras pra todo mundo que jogar — nem precisa se inscrever, é só jogar.
 - **🎡 Roleta Dourada**: sem pergunta nem corrida — quem está no salão ganha **um giro grátis** (Bolotas a Master Ball, por sorte).
 - **⚔️ Duelo Relâmpago**: torneio eliminatório **por sorteio** entre quem está no salão (não usa a Arena/PvP de verdade): cada rodada decide quem avança, até sobrar um campeão.
+- **🎄 Caça aos Presentes de Natal** *(sazonal)*: igual à Caça ao Tesouro, mas com 18 presentes (🎁/🎀/⭐) e tema de Natal. Só entra no **sorteio automático** durante a época de Natal (1/dez a 6/jan); um admin pode iniciar fora dela a qualquer hora pelo painel. Veja [Temporada de Natal](#temporada-de-natal-sazonal).
 - **Prêmios**: os tipos competitivos reaproveitam a mesma tabela de prêmios do Quiz (1º leva Master Ball, com 2+ participantes); Hora da Sorte e Roleta concedem direto, sem ranking. Na Pergunta de Ouro é tudo ou nada: só o 1º leva prêmio.
 
 ## Chefe de Mundo (evento cooperativo)
@@ -169,6 +170,21 @@ Para voltar ao PostgreSQL/MySQL: troque `provider` no schema e a `DATABASE_URL`,
 - Aparecem no mapa com um avatar parado, o Pokémon dele flutuando ao lado e uma etiqueta "⚔ Nome Lv.X". **Encostar nele desafia na hora**, igual a um selvagem — o servidor confere a distância.
 - **Não dá pra capturar o Pokémon do treinador** (como os chefes de cenário); vencer dá EXP e materiais do jeito normal. Perder ou fugir: o treinador continua lá, pronto pra ser desafiado de novo.
 - **Vencer "derrota" o treinador por 15 minutos** (ele some do mapa pra todo mundo e reaparece sozinho depois, em outro ponto alcançável do mesmo mundo). Código: `server/trainers.js` (lugar, time e janela de reaparecimento) + reaproveita 100% o motor de batalha já existente (só sem poder capturar).
+
+## Login Diário
+
+- Botão **🎁 Diário** no HUD (com uma bolinha vermelha quando dá pra resgatar). Mostra uma sequência de **7 dias**: Pokébolas → Bolotas → Great Balls → Fragmentos → Ultra Balls → Bolotas+Fragmentos → **Master Ball** (dia 7, o maior prêmio).
+- **Resgata uma vez por dia**; se faltar um dia inteiro sem resgatar, a sequência zera e volta pro dia 1. Voltar no dia seguinte (mesmo que tarde) mantém a sequência subindo.
+- O painel abre **sozinho** pouco depois de entrar no jogo, quando há recompensa disponível (só uma vez por sessão; não interrompe batalha).
+- Tudo decidido no servidor (`server/daily.js`), a partir de `last_login`/`login_streak` salvos no jogador — não dá pra adiantar o relógio do cliente pra resgatar de novo.
+
+## Temporada de Natal (sazonal)
+
+- Fica ativa sozinha de **1/dez a 6/jan** (`server/season.js`; `XMAS_FORCE=1` força ligada pra testar fora da época). Nessa janela:
+  - **Neve leve cai na Rota e na Cidade** (visual, não muda o clima de verdade — o Bioma de Gelo continua com a própria neve o ano todo).
+  - O evento **🎄 Caça aos Presentes de Natal** passa a entrar no sorteio automático do Salão de Eventos.
+  - O **Login Diário** ganha **+5 Bolotas de bônus** em todo resgate.
+- Fora da época, nada disso aparece (exceto se um admin iniciar a Caça aos Presentes manualmente, só pra testar).
 
 ## Efeitos de golpe e cenários de batalha
 - **Efeitos por tipo** (`public/fx.js`, motor de partículas em canvas): cada um dos 17 tipos tem o seu roteiro — Fogo (bola de chamas e explosão), Água (jato e respingo com ondas), Elétrico (raios ramificados e clarão), Planta (folhas em espiral), Gelo (estilhaços e cristal), Lutador (socos com ondas de choque), Veneno (bolhas e poça), Terra (fissuras, pedras e poeira com tremor forte), Voador (cortes de vento e penas), Psíquico (anéis e espiral), Inseto (enxame), Pedra (chuva de pedras), Fantasma (fogos-fátuos), Dragão (chamas em hélice) , Sombrio (fumaça e garras) , Aço (corte em X e faíscas) e Normal (impacto). Golpes **críticos** ficam maiores, com mais partículas e clarão; o atacante avança (golpes físicos) e aparece o **dano flutuante** (dourado = super efetivo, cinza = pouco efetivo).

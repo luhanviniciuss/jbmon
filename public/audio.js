@@ -3,7 +3,7 @@
 // Tudo silencioso até o primeiro toque/tecla do jogador (os navegadores bloqueiam áudio sem gesto do usuário).
 const Snd = (() => {
   const KEY = 'jbmon.audio';
-  let cfg = { musicOn: true, sfxOn: true, musicVol: 0.45, sfxVol: 0.7 };
+  let cfg = { musicOn: true, sfxOn: true, musicVol: 0.35, sfxVol: 0.7 };
   try { cfg = { ...cfg, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch {}
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch {} };
 
@@ -22,6 +22,21 @@ const Snd = (() => {
   }
   document.addEventListener('pointerdown', unlock, true);
   document.addEventListener('keydown', unlock, true);
+
+  // Aba em segundo plano: pausa TUDO (senão cada aba aberta do jogo continuaria tocando a música em loop)
+  document.addEventListener('visibilitychange', () => {
+    if (!ctx) return;
+    if (document.hidden) ctx.suspend().catch(() => {});
+    else if (cfg.musicOn || cfg.sfxOn) ctx.resume().catch(() => {});
+  });
+
+  // Tecla M liga/desliga a música na hora (fora dos campos de texto)
+  window.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() !== 'm' || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (typeof isTyping === 'function' && isTyping()) return;
+    setMusicOn(!cfg.musicOn);
+    if (typeof toast === 'function') toast(cfg.musicOn ? '🎵 Música ligada' : '🔇 Música desligada');
+  });
 
   // Clique de UI: um único ouvinte cobre botões, chips, abas e opções em todo o jogo
   document.addEventListener('click', (e) => {
@@ -128,6 +143,7 @@ const Snd = (() => {
   let curName = null, gen = 0;
   function scheduleLoop(def, myGen) {
     if (myGen !== gen || !ctx) return;
+    if (ctx.state !== 'running') { setTimeout(() => scheduleLoop(def, myGen), 400); return; }
     const t0 = ctx.currentTime + 0.05, beat = 60 / def.bpm;
     let t = t0;
     def.melody.forEach(([freq, beats]) => { const dur = beats * beat; if (freq) tone(t, freq, dur * 0.92, { type: def.wave, vol: def.vol, dest: musicGain }); t += dur; });
@@ -136,9 +152,9 @@ const Snd = (() => {
     setTimeout(() => scheduleLoop(def, myGen), Math.max(80, loopMs - 60));
   }
   function music(name) {
+    if (!ensure() || ctx.state === 'suspended') { pendingTrack = name; return; }
     if (name === curName) return;
     curName = name;
-    if (!ensure() || ctx.state === 'suspended') { pendingTrack = name; return; }
     gen++;
     if (name && TRACKS[name]) scheduleLoop(TRACKS[name], gen);
   }
@@ -146,6 +162,7 @@ const Snd = (() => {
   // ---------------------------------------------------------------- preferências (usadas por Settings)
   function setMusicOn(on) {
     cfg.musicOn = !!on; save();
+    document.querySelectorAll('[data-snd-mute]').forEach((b) => (b.textContent = cfg.musicOn ? '🎵' : '🔇'));
     if (!ensure()) return;
     if (on) { musicGain.gain.linearRampToValueAtTime(cfg.musicVol, ctx.currentTime + 0.25); const n = curName; curName = null; music(n); }
     else musicGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
@@ -154,5 +171,9 @@ const Snd = (() => {
   function setMusicVol(v) { cfg.musicVol = v; save(); if (ensure() && cfg.musicOn) musicGain.gain.value = v; }
   function setSfxVol(v) { cfg.sfxVol = v; save(); if (ensure() && cfg.sfxOn) sfxGain.gain.value = v; }
 
-  return { sfx, cry, music, setMusicOn, setSfxOn, setMusicVol, setSfxVol, prefs: () => ({ ...cfg }) };
+  // botão rápido do HUD
+  const muteBtn = document.getElementById('muteBtn');
+  if (muteBtn) { muteBtn.textContent = cfg.musicOn ? '🎵' : '🔇'; muteBtn.addEventListener('click', () => setMusicOn(!cfg.musicOn)); }
+
+  return { sfx, cry, music, setMusicOn, setSfxOn, setMusicVol, setSfxVol, prefs: () => ({ ...cfg }), stop: () => { curName = null; pendingTrack = undefined; gen++; } };
 })();

@@ -2,7 +2,7 @@
 // Fluxo: boss aparece no mapa -> jogadores formam grupo (2-4) -> encostam no boss -> raid por turnos:
 //   Fase 1 (luta): cada membro age na sua vez; o boss revida no atacante. Ao chegar em 15% de HP ele fica exausto.
 //   Fase 2 (captura): o boss segue com vida; cada membro tem UMA rodada para lançar uma Pokébola.
-const { SPECIES, RARITY, BOSS_TABLES, LEGEND_MOVES, POWER_CD, calcStats, effectiveness } = require('../public/species.js');
+const { SPECIES, RARITY, BOSS_TABLES, FINAL_BOSS_ID, LEGEND_MOVES, POWER_CD, calcStats, effectiveness } = require('../public/species.js');
 const { BALLS } = require('../public/items.js');
 const { WORLDS } = require('../public/map.js');
 const { durable } = require('./durable.js');
@@ -15,7 +15,9 @@ const CFG = {
   first: envNum('BOSS_FIRST_DELAY_MIN', 2) * 60000, // primeiro boss logo após ligar o servidor
   life: envNum('BOSS_LIFETIME_MIN', 30) * 60000, // quanto tempo espera por desafiantes
 };
-const BOSS_WORLDS = ['route', 'ice', 'lava']; // um boss por mundo, sempre no nível máximo do mundo (WORLDS[id].bossLevel)
+const BOSS_WORLDS = ['route', 'ice', 'lava', 'cave', 'sky']; // um boss por mundo, sempre no nível máximo do mundo (WORLDS[id].bossLevel)
+const FINAL_HP_MULT = 12; // o Chefe Final (Arceus) é bem mais resistente que os demais bosses
+const FINAL_BONUS = { apricorns: 120, shards: 60 }; // prêmio exclusivo de quem capturar o Chefe Final
 const MAX_GROUP = 4;
 const TURN_MS = 25000;
 const EXHAUST = 0.15; // o boss fica com 15% de HP na fase de captura
@@ -92,7 +94,7 @@ module.exports = function createRaidSystem(ctx) {
   // ================= Boss no mundo =================
   const bosses = { route: null, ice: null, lava: null }; // world -> { world, species_id, level, tx, ty, x, y, expiresAt, busy }
   let nextAt = null;
-  const worldName = (w) => (w === 'route' ? 'na Rota 1' : 'no ' + WORLDS[w].name);
+  const worldName = (w) => (w === 'route' ? 'na Rota 1' : w === 'cave' ? 'na Caverna do Abismo' : 'no ' + WORLDS[w].name);
   const bossPublic = (b) => (b && !b.busy ? { world: b.world, species_id: b.species_id, level: b.level, x: b.x, y: b.y, left: Math.max(0, b.expiresAt - Date.now()) } : null);
   const emitBoss = (target = io) => BOSS_WORLDS.forEach((w) => target.emit('boss:state', { world: w, boss: bossPublic(bosses[w]), nextIn: nextAt ? Math.max(0, nextAt - Date.now()) : null }));
   const worldOfSpecies = (id) => BOSS_WORLDS.find((w) => BOSS_TABLES[w].some(([s]) => s === id)) || 'route';
@@ -211,19 +213,21 @@ module.exports = function createRaidSystem(ctx) {
         return;
       }
       const level = boss.level;
+      const isFinal = boss.species_id === FINAL_BOSS_ID;
       const avg = Math.round(members.reduce((s, m) => s + m.mine.level, 0) / members.length);
       if (avg < level * 0.6) members.forEach((m) => notice(m.uid, `⚠ ${bossName(boss.species_id)} é Lv.${level} e a média do grupo é Lv.${avg}. Vai ser MUITO difícil!`));
       const st = calcStats(boss.species_id, level);
+      const hpMult = isFinal ? FINAL_HP_MULT : HP_MULT;
       const r = {
-        id: nextRid++, boss, members, level, atk: st.attack, def: st.defense, stats: st,
-        maxHp: st.hp * HP_MULT, hp: st.hp * HP_MULT, threshold: Math.ceil(st.hp * HP_MULT * EXHAUST),
+        id: nextRid++, boss, members, level, atk: st.attack, def: st.defense, stats: st, isFinal,
+        maxHp: st.hp * hpMult, hp: st.hp * hpMult, threshold: Math.ceil(st.hp * hpMult * EXHAUST),
         phase: 'fight', busy: false, pendingSaves: [], turn: null, turnIdx: -1, capQueue: [], timer: null, done: false, winner: null,
       };
       members.forEach((m) => raids.set(m.uid, r));
       emitBoss(); // some do mapa enquanto a raid acontece
       members.forEach((m) => socketByUser.get(m.uid)?.emit('raid:start', { state: stateFor(r, m) }));
       members.forEach((m) => ctx.dexSeen?.(m.uid, boss.species_id)); // Pokédex: o lendário foi visto
-      const log = [{ msg: `${bossName(boss.species_id)} Lv.${level} bloqueia o caminho! (${members.map((m) => m.username).join(', ')})`, bossHp: r.hp }];
+      const log = [{ msg: (isFinal ? `🌟 O CHEFE FINAL, ${bossName(boss.species_id)}, desceu dos céus! ` : `${bossName(boss.species_id)} Lv.${level} bloqueia o caminho! `) + `(${members.map((m) => m.username).join(', ')})`, bossHp: r.hp }];
       nextTurn(r, log);
       emitState(r, log);
     } catch (e) {
@@ -283,7 +287,7 @@ module.exports = function createRaidSystem(ctx) {
       const main = res.find((x) => x.mon === m.mine) || res[0];
       const others = res.filter((x) => x !== main && x.toLevel > x.fromLevel).length;
       const evo = main.evolved.length ? ` e evoluiu para ${SPECIES[main.evolved[main.evolved.length - 1].to].name}!` : '';
-      m.drops = { apricorns: rand(10, 20), shards: rand(6, 10) };
+      m.drops = { apricorns: rand(10, 20) + (r.isFinal ? FINAL_BONUS.apricorns : 0), shards: rand(6, 10) + (r.isFinal ? FINAL_BONUS.shards : 0) };
       push(`${m.username}: ${nameOf(main.mon)} +${main.amount} EXP${main.toLevel > main.fromLevel ? ` (Lv.${main.fromLevel}→${main.toLevel})` : ''}${evo}${others ? ` · ${others} da equipe também subiu${others > 1 ? 'ram' : ''} de nível` : ''}`, main.toLevel > main.fromLevel ? 'levelup' : null);
     }
     r.capQueue = r.members.filter((m) => !m.left).map((m) => m.uid);
@@ -463,7 +467,7 @@ module.exports = function createRaidSystem(ctx) {
       r.boss.busy = false;
       r.boss.expiresAt = Math.max(r.boss.expiresAt, Date.now() + 10 * 60000);
     } else {
-      io.emit('notice', { msg: result === 'caught' ? `${winner.username} capturou ${bName}!` : `${bName} fugiu…` });
+      io.emit('notice', { msg: result === 'caught' ? (r.isFinal ? `🌟🏆 ${winner.username} DERROTOU E CAPTUROU O CHEFE FINAL: ${bName}! Uma lenda para sempre. 🏆🌟` : `${winner.username} capturou ${bName}!`) : (r.isFinal ? `${bName}, o Chefe Final, escapou para o vazio…` : `${bName} fugiu…`), big: r.isFinal });
       bosses[r.boss.world] = null;
     }
     emitBoss();

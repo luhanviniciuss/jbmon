@@ -426,7 +426,7 @@ const Fx = (() => {
     });
   }
 
-  const BIOME_NAMES = { field: 'Campo', meadow: 'Grama alta', forest: 'Floresta', beach: 'Praia', lake: 'Lago', town: 'Praça do Centro Pokémon', legend: 'Arena lendária', snow: 'Neve', volcano: 'Vulcão' };
+  const BIOME_NAMES = { field: 'Campo', meadow: 'Grama alta', forest: 'Floresta', beach: 'Praia', lake: 'Lago', town: 'Praça do Centro Pokémon', legend: 'Arena lendária', snow: 'Neve', volcano: 'Vulcão', cave: 'Caverna do Abismo', space: 'Céu Estelar' };
 
   return { play, attack, BIOME_NAMES, TYPES_WITH_FX: Object.keys(EFFECTS) };
 })();

@@ -77,7 +77,7 @@ const Admin = (() => {
       '<div class="arow2" id="spXY" hidden><label class="al">x (0-99)<input id="spX" class="af" type="number" inputmode="numeric" value="50" /></label><label class="al">y (0-99)<input id="spY" class="af" type="number" inputmode="numeric" value="50" /></label></div>' +
       '<button class="btn primary" data-a="spawn">Spawnar</button><button class="ab" data-a="clearSpawns">🧹 Limpar spawns do admin</button>' +
       '<div class="section-title">Boss lendário agora</div>' + picker('bs', true) +
-      '<label class="al">Mundo do boss<select id="bsW" class="af"><option value="">Automático (pelo lendário)</option><option value="route">🌿 Rota 1 (Lv.60)</option><option value="ice">❄ Bioma de Gelo (Lv.200)</option><option value="lava">🌋 Vulcão (Lv.500)</option></select></label><button class="btn primary" data-a="boss">⚔ Chamar boss (nível máximo do mundo)</button><p class="hintline">Spawns de admin somem sozinhos e, se derrotados, não deixam substituto.</p>';
+      '<label class="al">Mundo do boss<select id="bsW" class="af"><option value="">Automático (pelo lendário)</option><option value="route">🌿 Rota 1 (Lv.60)</option><option value="ice">❄ Bioma de Gelo (Lv.200)</option><option value="lava">🌋 Vulcão (Lv.500)</option><option value="cave">🕳️ Caverna do Abismo (Lv.750)</option><option value="sky">🌌 Céu Estelar (Lv.1000)</option></select></label><button class="btn primary" data-a="boss">⚔ Chamar boss (nível máximo do mundo)</button><p class="hintline">Spawns de admin somem sozinhos e, se derrotados, não deixam substituto.</p>';
   }
   function giveHtml() {
     const names = (st?.online || []).map((p) => '<option value="' + esc(p.username) + '">').join('');

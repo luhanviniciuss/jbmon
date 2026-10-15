@@ -21,6 +21,8 @@ const WORLDS = {
   town: { id: 'town', name: 'Cidade', icon: '🏙', spawn: ARRIVE, biome: 'town', wild: null },
   ice: { id: 'ice', name: 'Bioma de Gelo', icon: '❄', spawn: ARRIVE, biome: 'snow', wild: { land: 60, water: 16, min: 80, base: 80, scale: 1.7, cap: 200 }, bossLevel: 200 },
   lava: { id: 'lava', name: 'Vulcão', icon: '🌋', spawn: ARRIVE, biome: 'volcano', wild: { land: 60, water: 0, min: 300, base: 300, scale: 3, cap: 500 }, bossLevel: 500 },
+  cave: { id: 'cave', name: 'Caverna do Abismo', icon: '🕳️', spawn: ARRIVE, biome: 'cave', wild: { land: 60, water: 20, min: 500, base: 500, scale: 4, cap: 750 }, bossLevel: 750 },
+  sky: { id: 'sky', name: 'Céu Estelar', icon: '🌌', spawn: ARRIVE, biome: 'space', wild: { land: 60, water: 0, min: 750, base: 750, scale: 4, cap: 1000 }, bossLevel: 1000 },
 };
 const WORLD_IDS = Object.keys(WORLDS);
 const GYM_EXIT = { x: (GYM.doorX + 0.5) * TILE, y: (GYM.doorY + 1.5) * TILE }; // em frente ao ginásio, na Rota
@@ -97,6 +99,34 @@ function genLava() {
   }));
 }
 
+function genCave() {
+  return summitPath(grid((x, y) => {
+    const e = Math.sin(x * 0.1 - 1) + Math.cos(y * 0.14 + 2) + Math.sin((x - y) * 0.06);
+    let t = 0;
+    if (e < -1.2) t = 2;                                    // abismo / lago subterrâneo (bloqueia; Pokémon aquáticos)
+    else if (e < -0.9) t = 1;                               // pedra lisa
+    else if (hash(x + 51, y + 29) < 0.1) t = 3;             // blocos de rocha
+    else if (Math.sin(x * 0.28 - 1) + Math.cos(y * 0.25 + 2) + Math.sin((x + y) * 0.09) > 0.65) t = 4; // musgo luminoso (encontros)
+    if (isBorder(x, y)) t = 3;
+    if (arrivalZone(x, y)) t = 0;
+    return t;
+  }));
+}
+
+function genSky() {
+  return summitPath(grid((x, y) => {
+    const e = Math.sin(x * 0.09 + 3) + Math.cos(y * 0.1 - 2) + Math.sin((x + y) * 0.04);
+    let t = 0;
+    if (e < -1.25) t = 2;                                   // vazio estelar (bloqueia)
+    else if (e < -0.95) t = 1;                              // plataforma de cristal
+    else if (hash(x + 77, y + 61) < 0.08) t = 3;            // destroços de asteroide
+    else if (Math.sin(x * 0.31 + 2) + Math.cos(y * 0.26) + Math.sin((x - y) * 0.08) > 0.7) t = 4; // nebulosa (encontros)
+    if (isBorder(x, y)) t = 3;
+    if (arrivalZone(x, y)) t = 0;
+    return t;
+  }));
+}
+
 // Casas da cidade (x, y, largura, altura em tiles): sólidas no mapa; o cliente desenha uma casa em cada uma
 const TOWN_HOUSES = [31, 39, 56, 64].flatMap((x) => [{ x, y: 31, w: 6, h: 4 }, { x, y: 65, w: 6, h: 4 }]).concat([{ x: 31, y: 47, w: 5, h: 5 }, { x: 64, y: 47, w: 5, h: 5 }]);
 
@@ -113,7 +143,7 @@ function genTown() {
 }
 
 function generateMap(world = 'route') {
-  return world === 'ice' ? genIce() : world === 'lava' ? genLava() : world === 'town' ? genTown() : genRoute();
+  return world === 'ice' ? genIce() : world === 'lava' ? genLava() : world === 'cave' ? genCave() : world === 'sky' ? genSky() : world === 'town' ? genTown() : genRoute();
 }
 
 if (typeof module !== "undefined") module.exports = { MAP_W, MAP_H, TILE, PLAYER_SPEED, CLEAR_MIN, CLEAR_MAX, LAB, GYM, TOWN_LAB, LABS, PROF_HOUSE, EVENT_HOUSE, TOWN_HOUSES, PORTAL, ARRIVE, GYM_EXIT, WORLDS, WORLD_IDS, generateMap };

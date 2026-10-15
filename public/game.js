@@ -291,8 +291,10 @@ const MINI_COLORS = {
   ice: ['#eaf4ff', '#bfe6ff', '#5fa8e0', '#8fd0f0', '#cfe0f0'],
   lava: ['#2b2225', '#4a3f42', '#ff5a1f', '#6b5a5e', '#7a3a24'],
   town: ['#b9bcc8', '#d6d0c0', '#4da3ff', '#2f6b3a', '#b9bcc8'],
+  cave: ['#2a2435', '#3a3448', '#120a1e', '#4a4260', '#5c4a7a'],
+  sky: ['#1a1a3a', '#2a2a52', '#05051a', '#3a3a6a', '#4a3a8a'],
 };
-const WORLD_BG = { route: '#0b1020', town: '#2f6b3a', ice: '#eaf4ff', lava: '#150a0a' };
+const WORLD_BG = { route: '#0b1020', town: '#2f6b3a', ice: '#eaf4ff', lava: '#150a0a', cave: '#120a1e', sky: '#0a0a2a' };
 function buildMinimap(mapData, world = 'route') {
   const TILE_COLORS = MINI_COLORS[world] || MINI_COLORS.route;
   const off = document.createElement('canvas');
@@ -412,7 +414,7 @@ function initChat() {
 
 // ---------- Phaser ----------
 class WorldScene extends Phaser.Scene {
-  constructor() { super('World'); this.others = new Map(); this.wilds = new Map(); this.bubbles = new Map(); this.monWait = {}; this.lastSent = 0; }
+  constructor() { super('World'); this.others = new Map(); this.wilds = new Map(); this.trainers = new Map(); this.bubbles = new Map(); this.monWait = {}; this.lastSent = 0; }
 
   create() {
     this.makeTextures();
@@ -432,11 +434,12 @@ class WorldScene extends Phaser.Scene {
     this.socket = io({ auth: { token } });
     this.socket.on('connect_error', (err) => showOffline('Conexão recusada', err.message));
     this.socket.on('disconnect', (reason) => {
+      Snd.music(null); // sem conexão: sem música
       if (window.__adminEnd) return; // já mostramos o motivo (banido/expulso)
       if (reason === 'io server disconnect') showOffline('Desconectado', 'Sua conta foi aberta em outro lugar ou a sessão foi encerrada.');
       else $('offline').hidden = false;
     });
-    this.socket.on('connect', () => { $('offline').hidden = true; });
+    this.socket.on('connect', () => { $('offline').hidden = true; Snd.music(worldMusic()); });
     this.socket.on('online', (n) => { $('online').textContent = n; });
     this.socket.on('players:init', ({ self, others, balls }) => {
       MY_ID = self.id;
@@ -510,12 +513,14 @@ class WorldScene extends Phaser.Scene {
     this.socket.on('prof:exited', () => this.closeInterior());
     this.socket.on('lab:exited', () => this.closeInterior());
     this.socket.on('gym:exited', () => this.closeInterior());
-    this.socket.on('world:enter', ({ world, x, y, others, wilds }) => {
+    this.socket.on('world:enter', ({ world, x, y, others, wilds, trainers }) => {
       this.closeInterior(false);
       this.others.forEach((o) => { o.sprite.destroy(); o.label.destroy(); o.shadow.destroy(); o.tag.destroy(); this.killBuddy(o); });
       this.others.clear();
       this.wilds.forEach((w) => this.destroyWild(w));
       this.wilds.clear();
+      this.trainers.forEach((t) => this.destroyTrainer(t));
+      this.trainers.clear();
       this.loadWorld(world);
       this.player.setPosition(x, y);
       this.player.setVelocity(0, 0);
@@ -524,6 +529,7 @@ class WorldScene extends Phaser.Scene {
       this.lastTarget = '';
       others.forEach((p) => this.addOther(p));
       wilds.forEach((w) => this.addWild(w));
+      (trainers || []).forEach((t) => this.addTrainer(t));
       this.setBoss(this.bossRaw?.[world] || null);
       this.setWBoss(this.wbRaw || null);
       this.cameras.main.resetFX();
@@ -577,6 +583,7 @@ class WorldScene extends Phaser.Scene {
     });
     // Pokémon selvagens (o servidor manda e controla; aqui só desenhamos)
     this.socket.on('wild:list', (list) => { this.wilds.forEach((w) => this.destroyWild(w)); this.wilds.clear(); list.forEach((w) => this.addWild(w)); });
+    this.socket.on('trainer:list', (list) => { this.trainers.forEach((t) => this.destroyTrainer(t)); this.trainers.clear(); list.forEach((t) => this.addTrainer(t)); });
     this.socket.on('wild:add', (w) => this.addWild(w));
     this.socket.on('wild:remove', (id) => { const w = this.wilds.get(id); if (w) { this.destroyWild(w); this.wilds.delete(id); } });
     this.socket.on('wild:update', (arr) => arr.forEach(({ id, x, y }) => { const w = this.wilds.get(id); if (w) this.tweens.add({ targets: w.img, x, y, duration: 900 }); }));
@@ -629,6 +636,7 @@ class WorldScene extends Phaser.Scene {
       if (def.id === 'town') this.drawTown();
       else { this.weather(def.id); this.drawChiefs(def.id); }
     }
+    $('worldChip').title = def.wild ? `${def.name} · Lv. ${def.wild.min}–${def.wild.cap}` : def.name;
     $('worldChip').textContent = def.icon + ' ' + def.name;
   }
 
@@ -763,6 +771,16 @@ class WorldScene extends Phaser.Scene {
       this.reg(em);
       const heat = this.reg(this.add.rectangle(0, 0, 6000, 6000, 0xff4a1f, 0.07).setOrigin(0).setScrollFactor(0).setDepth(29)); // calor
       this.tweens.add({ targets: heat, alpha: 0.16, yoyo: true, repeat: -1, duration: 1500, ease: 'Sine.easeInOut' });
+    } else if (id === 'cave') {
+      const em = this.add.particles(0, 0, 'flake', { x: { min: 0, max: w }, y: { min: 0, max: this.scale.height }, lifespan: 5500, speedY: { min: -8, max: 8 }, speedX: { min: -8, max: 8 }, scale: { min: 0.3, max: 0.9 }, alpha: { min: 0.15, max: 0.4 }, tint: 0x8a6bd1, frequency: 90, quantity: 1 });
+      em.setScrollFactor(0).setDepth(30);
+      this.reg(em);
+      this.reg(this.add.rectangle(0, 0, 6000, 6000, 0x120a1e, 0.24).setOrigin(0).setScrollFactor(0).setDepth(29)); // escuridão do abismo
+    } else if (id === 'sky') {
+      const em = this.add.particles(0, 0, 'flake', { x: { min: 0, max: w }, y: { min: 0, max: this.scale.height }, lifespan: 3200, speedY: { min: -4, max: 4 }, speedX: { min: -4, max: 4 }, scale: { start: 0.2, end: 0.9 }, alpha: { start: 0.9, end: 0 }, tint: [0xffffff, 0x9b6bff, 0x6bd6ff], blendMode: 'ADD', frequency: 55, quantity: 1 });
+      em.setScrollFactor(0).setDepth(30);
+      this.reg(em);
+      this.reg(this.add.rectangle(0, 0, 6000, 6000, 0x0a0a2a, 0.2).setOrigin(0).setScrollFactor(0).setDepth(29)); // véu cósmico
     }
   }
 
@@ -1127,6 +1145,19 @@ class WorldScene extends Phaser.Scene {
   walkToWorld(x, y) { this.setTarget({ worldX: x, worldY: y }, false); }
 
   destroyWild(w) { this.tweens.killTweensOf(w.img); w.img.destroy(); w.shadow.destroy(); w.label.destroy(); }
+
+  // Treinador NPC: avatar parado + ícone do Pokémon dele flutuando + nome. Encostar desafia, igual a um selvagem.
+  addTrainer(t) {
+    if (this.trainers.has(t.id)) return;
+    const shadow = this.add.image(t.x, t.y + 14, 'shadow').setDepth(8).setScale(1.2);
+    const av = this.add.sprite(t.x, t.y, t.avatar, 'down0').setDepth(9).setScale(1.1);
+    const mon = this.add.image(t.x + 24, t.y - 6, 'wilddot').setDepth(9);
+    this.ensureMon(t.species_id, (key) => { if (mon.active) mon.setTexture(key).setDisplaySize(42, 42); });
+    this.tweens.add({ targets: mon, y: t.y - 14, yoyo: true, repeat: -1, duration: 900, ease: 'Sine.easeInOut' });
+    const label = this.add.text(t.x, t.y - 42, '⚔ ' + t.name + ' Lv.' + t.level, { fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: '11px', fontStyle: 'bold', color: '#fff', backgroundColor: '#5a2a2ae6', padding: { x: 5, y: 2 } }).setOrigin(0.5).setDepth(19);
+    this.trainers.set(t.id, { shadow, av, mon, label });
+  }
+  destroyTrainer(t) { this.tweens.killTweensOf(t.mon); t.shadow.destroy(); t.av.destroy(); t.mon.destroy(); t.label.destroy(); }
 
   // Etiqueta vermelha "EM COMBATE" acima do nome (escondida por padrão; pisca para chamar atenção)
   combatTag() {

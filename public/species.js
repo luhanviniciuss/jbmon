@@ -99,6 +99,13 @@ const SPECIES = {
   382: S('Kyogre', 'water', 100, 100, 90, 0.03, 340, 'legendary'), 383: S('Groudon', 'ground', 100, 150, 140, 0.03, 340, 'legendary'), 384: S('Rayquaza', 'dragon/flying', 105, 150, 90, 0.03, 340, 'legendary'),
   385: S('Jirachi', 'steel/psychic', 100, 100, 100, 0.04, 300, 'legendary'), 386: S('Deoxys', 'psychic', 50, 150, 50, 0.03, 340, 'legendary'),
 
+  // ----- Lendários da Caverna do Abismo e do Céu Estelar (super atualização: nível 1000) -----
+  480: S('Uxie', 'psychic', 75, 75, 130, 0.04, 300, 'legendary'), 481: S('Mesprit', 'psychic', 80, 105, 105, 0.04, 300, 'legendary'), 482: S('Azelf', 'psychic', 75, 125, 70, 0.04, 300, 'legendary'),
+  485: S('Heatran', 'fire/steel', 91, 90, 106, 0.04, 310, 'legendary'), 486: S('Regigigas', 'normal', 110, 160, 110, 0.04, 320, 'legendary'), 487: S('Giratina', 'ghost/dragon', 150, 100, 120, 0.03, 340, 'legendary'),
+  483: S('Dialga', 'steel/dragon', 100, 120, 120, 0.03, 350, 'legendary'), 484: S('Palkia', 'water/dragon', 90, 120, 100, 0.03, 350, 'legendary'), 488: S('Cresselia', 'psychic', 120, 70, 120, 0.04, 310, 'legendary'),
+  491: S('Darkrai', 'dark', 70, 90, 90, 0.04, 310, 'legendary'), 492: S('Shaymin', 'grass', 100, 100, 100, 0.04, 310, 'legendary'),
+  493: S('Arceus', 'normal', 120, 120, 120, 0.02, 400, 'legendary'), // o Chefe Final: raríssimo, no nível máximo do jogo
+
   // ----- Pokémon bebê (pré-evoluções) -----
   172: S('Pichu', 'electric', 20, 40, 15, 0.85, 41, 'uncommon'),
   173: S('Cleffa', 'normal', 50, 25, 28, 0.85, 44, 'uncommon'),
@@ -202,12 +209,23 @@ const ICE_TABLE = [
   [131, 1.2], [133, 0.8], [147, 0.6],
 ];
 const ICE_WATER_TABLE = [[86, 14], [90, 12], [87, 6], [91, 4], [60, 5], [131, 1.5]];
+const CAVE_TABLE = [ // Caverna do Abismo: Pedra/Terra/Sombrio/Fantasma/Aço, Lv. 500 a 750
+  [41, 14], [50, 12], [74, 12], [92, 10], [27, 8], [104, 6], [215, 5], [111, 5],
+  [95, 4], [228, 4], [246, 3], [142, 2.5],
+  [248, 0.8], [359, 0.8],
+];
+const CAVE_WATER_TABLE = [[138, 8], [140, 8], [139, 1.2], [141, 1.2]]; // lago subterrâneo do abismo
+const SKY_TABLE = [ // Céu Estelar: Psíquico/Voador/Dragão/Aço, Lv. 750 a 1000
+  [96, 14], [63, 12], [81, 10], [137, 8], [123, 6], [227, 5],
+  [212, 3], [148, 2], [130, 1.5],
+  [149, 0.8], [65, 0.8],
+];
 const LAVA_TABLE = [
   [4, 12], [37, 10], [74, 10], [240, 8], [228, 8], [50, 8], [95, 6], [111, 5], [104, 5],
   [58, 5], [77, 5], [5, 4], [75, 4], [51, 3.5], [246, 3], [126, 3], [229, 2.5],
   [59, 0.9], [78, 0.9], [136, 0.6], [6, 0.5], [248, 0.4],
 ];
-const WORLD_TABLES = { ice: { land: ICE_TABLE, water: ICE_WATER_TABLE }, lava: { land: LAVA_TABLE, water: [] } };
+const WORLD_TABLES = { ice: { land: ICE_TABLE, water: ICE_WATER_TABLE }, lava: { land: LAVA_TABLE, water: [] }, cave: { land: CAVE_TABLE, water: CAVE_WATER_TABLE }, sky: { land: SKY_TABLE, water: [] } };
 // PODER LENDÁRIO: todo lendário tem um golpe a mais que os outros Pokémon (além de Investida e Golpe Forte).
 // Ignora resistência e imunidade (nunca é "pouco efetivo"), tem 25% de crítico e recarrega por POWER_CD turnos.
 const POWER_CD = 3;
@@ -223,6 +241,11 @@ const LEGEND_MOVES = {
   382: { name: 'Origem do Mar', type: 'water', power: 135 }, 383: { name: 'Terra Primal', type: 'ground', power: 135 },
   384: { name: 'Ira do Céu', type: 'dragon', power: 135 }, 385: { name: 'Desejo Estelar', type: 'steel', power: 120 },
   386: { name: 'Onda Cósmica', type: 'psychic', power: 125 },
+  480: { name: 'Conhecimento Absoluto', type: 'psychic', power: 120 }, 481: { name: 'Coração Radiante', type: 'psychic', power: 120 }, 482: { name: 'Vontade Inquebrável', type: 'psychic', power: 120 },
+  483: { name: 'Ruptura Temporal', type: 'dragon', power: 135 }, 484: { name: 'Lança Espacial', type: 'dragon', power: 135 }, 485: { name: 'Fúria Magmática', type: 'fire', power: 125 },
+  486: { name: 'Punho Colossal', type: 'normal', power: 130 }, 487: { name: 'Véu da Distorção', type: 'ghost', power: 130 }, 488: { name: 'Véu Lunar', type: 'psychic', power: 120 },
+  491: { name: 'Pesadelo Eterno', type: 'dark', power: 125 }, 492: { name: 'Floração Celestial', type: 'grass', power: 120 },
+  493: { name: 'Julgamento Divino', type: 'normal', power: 140 }, // o Poder Lendário do Chefe Final
 };
 // Lendários que aparecem como boss a cada 3 h: [species_id, peso]
 const BOSS_TABLE = [
@@ -230,13 +253,18 @@ const BOSS_TABLE = [
   [150, 2], [151, 2], [251, 2], [377, 2], [378, 2], [379, 2],
   [249, 1.5], [250, 1.5], [380, 1.5], [381, 1.5], [385, 1.5],
   [382, 1], [383, 1], [384, 1], [386, 1],
+  [480, 2], [481, 2], [482, 2], [485, 1.5], [486, 1], [487, 1],
+  [483, 1], [484, 1], [488, 1.5], [491, 1.5], [492, 1.5], [493, 0.15],
 ];
 // Um boss lendário por mundo, com lendários próprios e SEMPRE no nível máximo do mundo (WORLDS[id].bossLevel)
 const BOSS_TABLES = {
   route: [[145, 3], [243, 3], [151, 2], [251, 2], [150, 2], [380, 1.5], [381, 1.5], [385, 1.5], [386, 1]],
   ice: [[144, 3], [245, 3], [378, 2], [379, 2], [249, 1.5], [382, 1]],
   lava: [[146, 3], [244, 3], [377, 2], [250, 1.5], [383, 1], [384, 1]],
+  cave: [[487, 1], [485, 1.5], [486, 1], [480, 2], [481, 2], [482, 2]], // Giratina, Heatran, Regigigas, Uxie, Mesprit, Azelf
+  sky: [[483, 1], [484, 1], [488, 1.5], [491, 1.5], [492, 1.5], [493, 0.12]], // Dialga, Palkia, Cresselia, Darkrai, Shaymin, Arceus (raríssimo: Chefe Final)
 };
+const FINAL_BOSS_ID = 493; // Arceus: o Chefe Final, muito mais raro e muito mais forte que os demais
 
 function calcStats(id, level) {
   const s = SPECIES[id];
@@ -248,7 +276,7 @@ function calcStats(id, level) {
 }
 
 // EXP necessário para ir de `level` para `level + 1` (cresce de forma suave até o nível 100)
-const MAX_LEVEL = 1000; // nível máximo de qualquer Pokémon (a Rota vai até 60; o Gelo até 200; o Vulcão até 500)
+const MAX_LEVEL = 1000; // nível máximo de qualquer Pokémon (Rota 60; Gelo 200; Vulcão 500; Caverna do Abismo 750; Céu Estelar 1000)
 const expToNext = (level) => Math.floor(0.9 * level * level + 12 * level + 20);
 
 // Nível mínimo em que uma espécie pode existir na natureza: uma forma evoluída nunca é mais fraca do que o
@@ -265,5 +293,5 @@ function evolveTarget(id, level) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { SPECIES, RARITY, TYPES, CHART, MOVE_NAMES, EVOLUTIONS, WILD_TABLE, WATER_TABLE, WORLD_TABLES, BOSS_TABLE, BOSS_TABLES, LEGEND_MOVES, POWER_CD, MAX_LEVEL, expToNext, minLevel, calcStats, evolveTarget, effectiveness };
+  module.exports = { SPECIES, RARITY, TYPES, CHART, MOVE_NAMES, EVOLUTIONS, WILD_TABLE, WATER_TABLE, WORLD_TABLES, BOSS_TABLE, BOSS_TABLES, FINAL_BOSS_ID, LEGEND_MOVES, POWER_CD, MAX_LEVEL, expToNext, minLevel, calcStats, evolveTarget, effectiveness };
 }

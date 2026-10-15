@@ -8,6 +8,7 @@ const { Server } = require('socket.io');
 const { PrismaClient } = require('@prisma/client');
 const { MAP_W, TILE, PLAYER_SPEED, CLEAR_MIN, CLEAR_MAX, GYM, LABS, PROF_HOUSE, EVENT_HOUSE, PORTAL, ARRIVE, GYM_EXIT, WORLDS, WORLD_IDS, generateMap } = require('../public/map.js');
 const createWorld = require('./world.js');
+const createTrainers = require('./trainers.js');
 const createWorldBoss = require('./worldboss.js');
 const { SPECIES, WILD_TABLE, WATER_TABLE, calcStats, minLevel } = require('../public/species.js');
 const { BALLS, RECIPES } = require('../public/items.js');
@@ -67,8 +68,9 @@ let nextWildId = 1;
 const W = {}; // id do mundo -> mundo
 for (const wid of WORLD_IDS) W[wid] = createWorld({ io, id: wid, MAP: wid === 'route' ? MAP : generateMap(wid), newId: () => nextWildId++ });
 // Chefes de cenário (Modo História) são batalhas especiais: não estão na lista de selvagens, então não voltam ao mapa nem renascem
-const releaseWild = (w) => { if (w.story) { w.busy = false; return; } W[w.worldId].releaseWild(w); };
-const defeatWild = (w) => { if (w.story) return; W[w.worldId].defeatWild(w); };
+const releaseWild = (w) => { if (w.story || w.trainer) { w.busy = false; return; } W[w.worldId].releaseWild(w); };
+const defeatWild = (w) => { if (w.story || w.trainer) return; W[w.worldId].defeatWild(w); };
+const trainers = createTrainers({ io, worlds: W });
 const isBlocked = (x, y, world = 'route') => W[world].isBlocked(x, y);
 const allWilds = () => WORLD_IDS.flatMap((wid) => [...W[wid].wilds.values()]);
 
@@ -223,7 +225,7 @@ function changeWorld(uid, worldId, x, y) {
   me.inside = null;
   sock.join('w:' + worldId);
   sock.to('w:' + worldId).emit('player:joined', me, true);
-  sock.emit('world:enter', { world: worldId, x, y, others: [...players.values()].filter((p) => p.world === worldId && p.id !== me.id), wilds: W[worldId].publicList() });
+  sock.emit('world:enter', { world: worldId, x, y, others: [...players.values()].filter((p) => p.world === worldId && p.id !== me.id), wilds: W[worldId].publicList(), trainers: trainers.publicList(worldId) });
   savePosition(me, true);
   story.onWorld(uid, worldId);
   return true;
@@ -269,17 +271,18 @@ const raidSys = createRaidSystem({
   setBusy: (uid, v) => { v ? battlingUsers.add(uid) : battlingUsers.delete(uid); markCombat(uid, v ? 'raid' : null); }, // usado pela raid
 });
 
+const worldCtx = {
+  allWilds,
+  spawnAdminWild: (opts, wid) => W[W[wid] ? wid : 'route'].spawnAdminWild(opts),
+  clearAdminWilds: () => WORLD_IDS.reduce((n, wid) => n + W[wid].clearAdminWilds(), 0),
+  isWalkable: (tx, ty, wid) => W[W[wid] ? wid : 'route'].isWalkable(tx, ty),
+};
 registerAdmin({
   events: { start: (...a) => events.start(...a), cancel: (...a) => events.cancel(...a), setAuto: (v) => events.setAuto(v), summary: () => events.summary() },
   afterGive: (uid) => refreshBuddy(uid),
   app, prisma, auth, moderation, io, socketByUser, meByUser, raidSys, teleportTo, nextFreeSlot, invOf, TILE,
   isBusy: (uid) => battlingUsers.has(uid),
-  world: {
-    allWilds,
-    spawnAdminWild: (opts, wid) => W[W[wid] ? wid : 'route'].spawnAdminWild(opts),
-    clearAdminWilds: () => WORLD_IDS.reduce((n, wid) => n + W[wid].clearAdminWilds(), 0),
-    isWalkable: (tx, ty, wid) => W[W[wid] ? wid : 'route'].isWalkable(tx, ty),
-  },
+  world: worldCtx,
 });
 
 const clans = createClans({ app, prisma, auth, io, socketByUser, meByUser });
@@ -300,7 +303,7 @@ const worldBoss = createWorldBoss({
   setBusy: (uid, v) => { v ? battlingUsers.add(uid) : battlingUsers.delete(uid); markCombat(uid, v ? 'raid' : null); },
   buddyRefresh: (uid) => refreshBuddy(uid),
 });
-const events = createEvents({ io, prisma, socketByUser, meByUser, durable, worldBoss });
+const events = createEvents({ io, prisma, socketByUser, meByUser, durable, worldBoss, world: worldCtx });
 const chat = createChat({ io, socketByUser, meByUser, groupMembers: raidSys.groupMembers, clanMembers: clans.clanMembersOnline, moderation });
 
 io.use(async (socket, next) => {
@@ -347,6 +350,7 @@ io.on('connection', (socket) => {
     others: [...players.entries()].filter(([sid, p]) => sid !== socket.id && p.world === me.world).map(([, p]) => p),
   });
   socket.emit('wild:list', W[me.world].publicList());
+  socket.emit('trainer:list', trainers.publicList(me.world));
   socket.to('w:' + me.world).emit('player:joined', me);
   io.emit('online', players.size);
 
@@ -391,9 +395,9 @@ io.on('connection', (socket) => {
       if (!mine || socket.disconnected) return releaseWild(w);
       const wildMon = makeWild(w.species_id, w.level);
       if (w.hpMult) { wildMon.maxHp = Math.round(wildMon.maxHp * w.hpMult); wildMon.hp = wildMon.maxHp; }
-      battle = { team, mine, world: w, wild: wildMon, inv: invOf(fresh), noCatch: !!w.story };
+      battle = { team, mine, world: w, wild: wildMon, inv: invOf(fresh), noCatch: !!w.story || !!w.trainer };
       pokedex.mark(u.id, w.species_id, 'seen'); // Pokédex: visto
-      socket.emit('battle:start', { chief: w.story ? w.name : null, biome: WORLDS[w.worldId].biome || biomeAt(MAP, TILE, w.x, w.y, { water: !!w.water }), wild: wildView(battle.wild), mine: mineView(mine), balls: battle.inv, team: team.map(mineView) });
+      socket.emit('battle:start', { chief: (w.story || w.trainer) ? w.name : null, biome: WORLDS[w.worldId].biome || biomeAt(MAP, TILE, w.x, w.y, { water: !!w.water }), wild: wildView(battle.wild), mine: mineView(mine), balls: battle.inv, team: team.map(mineView) });
     } catch (err) {
       console.error('Falha ao iniciar batalha', err.message);
       releaseWild(w);
@@ -473,7 +477,7 @@ io.on('connection', (socket) => {
   socket.on('gym:enter', () => { if (me.world === 'route' && enterInterior('gym', GYM)) socket.emit('gym:entered'); });
   socket.on('gym:exit', () => leaveInterior('gym', 'gym:exited'));
   socket.on('gym:travel', (dest) => { // portal do ginásio -> outro mundo
-    if (me.inside !== 'gym' || !['town', 'ice', 'lava'].includes(dest)) return;
+    if (me.inside !== 'gym' || !['town', 'ice', 'lava', 'cave', 'sky'].includes(dest)) return;
     const locked = story.gate(u.id, dest); // Modo História: Gelo e Vulcão abrem ao concluir capítulos
     if (locked) return socket.emit('notice', { msg: '🔒 ' + locked, big: true });
     immuneUntil = Date.now() + IMMUNE_MS;
@@ -519,9 +523,11 @@ io.on('connection', (socket) => {
 
       socket.emit('battle:update', { log: r.log, result: r.result, team: teamView(b), forceSwitch: !!b.forceSwitch, balls: b.inv, drops: r.drops || null, capture: r.capture ? { species_id: r.capture.species_id } : null });
       if (r.result) {
+        events.onBattleEnd(u.id, r.result, b.wild.species_id); // eventos de captura/vitória (ex.: Captura Relâmpago, Hora da Sorte)
         if (r.result === 'win' || r.result === 'caught') { defeatWild(b.world); if (b.world.story) story.onChiefDefeated(u.id, b.world.story); }
         else releaseWild(b.world);
-        if (!b.world.story) story.onWildEnd(u.id, r.result, b.world.worldId); // Modo História: contadores de captura/vitórias
+        if (b.world.trainer) trainers.onBattleEnd(b.world.trainer, b.world.worldId, r.result);
+        if (!b.world.story && !b.world.trainer) story.onWildEnd(u.id, r.result, b.world.worldId); // Modo História: contadores de captura/vitórias
         immuneUntil = Date.now() + IMMUNE_MS;
         battle = null;
         refreshBuddy(u.id); // evolução no fim da batalha muda o companheiro
@@ -579,7 +585,10 @@ io.on('connection', (socket) => {
     raidSys.onMove(u.id);
     worldBoss.onMove(u.id); // encostar no Chefe de Mundo entra na luta
     story.onMove(u.id, me); // Modo História: chegar a um ponto do mapa
+    events.onMove(u.id, me); // eventos espaciais (caça ao tesouro, corrida, chuva de bolas)
     if (now >= immuneUntil && !battle && !starting && !raidSys.inRaid(u.id) && !worldBoss.inFight(u.id)) {
+      const tr = trainers.nearbyFor(me);
+      if (tr) { trainers.markBusy(tr); startBattle({ id: -2, worldId: tr.world, species_id: tr.species_id, level: tr.level, water: false, x: tr.x, y: tr.y, busy: false, trainer: tr.id, name: tr.name }); return; }
       for (const w of W[me.world].wilds.values()) {
         if (!w.busy && Math.hypot(me.x - w.x, me.y - w.y) < (w.water ? WATER_TOUCH : TOUCH_RADIUS)) { startBattle(w); return; }
       }
